@@ -101,8 +101,8 @@ router.beforeEach(async (to) => {
 
 router.afterEach((to) => {
   document.title = to.meta.title
-    ? `${to.meta.title} - 商场导航管理后台`
-    : '商场导航管理后台'
+    ? `${to.meta.title} - 商场可视化导航系统`
+    : '商场可视化导航系统'
 })
 
 export default router

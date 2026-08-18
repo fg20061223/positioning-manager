@@ -9,11 +9,7 @@
           你好，{{ auth.displayName }}
           <el-tag size="small" :type="userTypeTag">{{ userTypeLabel }}</el-tag>
         </h3>
-        <p class="desc">商场可视化智能车位 / 商铺导航系统 · PC 管理后台</p>
-        <p class="desc">
-          当前进度（M1）：脚手架 + 登录/登出 + RBAC 路由守卫 + 商场 / 楼层 / 分区管理。
-          车位、商铺、导航图编辑器等模块将在后续里程碑接入。
-        </p>
+        <p class="desc">商场可视化导航系统 · PC 管理后台</p>
         <el-button type="primary" @click="router.push('/mall')">
           进入商场管理
         </el-button>

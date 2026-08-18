@@ -2,8 +2,8 @@
   <div class="login-page">
     <el-card class="login-card" shadow="always">
       <div class="login-title">
-        <h2>商场导航管理后台</h2>
-        <p>商场可视化智能车位 / 商铺导航系统</p>
+        <h2>商场可视化导航系统</h2>
+        <p>PC 管理后台</p>
       </div>
       <el-form
         ref="formRef"
@@ -40,10 +40,6 @@
           </el-button>
         </el-form-item>
       </el-form>
-      <div class="login-tip">
-        <p>测试账号（密码均 123456）：</p>
-        <p>admin（平台管理员）/ operator（商场运营）</p>
-      </div>
     </el-card>
   </div>
 </template>
@@ -123,16 +119,5 @@ async function onSubmit() {
 
 .login-btn {
   width: 100%;
-}
-
-.login-tip {
-  margin-top: 8px;
-  color: #909399;
-  font-size: 12px;
-  text-align: center;
-}
-
-.login-tip p {
-  margin: 2px 0;
 }
 </style>

@@ -3,7 +3,7 @@
     <!-- 侧边栏 -->
     <el-aside width="220px" class="layout-aside">
       <div class="logo">
-        <span class="logo-text">商场导航管理后台</span>
+        <span class="logo-text">商场可视化导航系统</span>
       </div>
       <el-menu
         class="layout-menu"
@@ -139,6 +139,9 @@ async function onCommand(command: string) {
   color: #fff;
   font-weight: 600;
   font-size: 15px;
+  line-height: 1.35;
+  padding: 0 10px;
+  text-align: center;
   background-color: #002140;
   flex-shrink: 0;
 }
