@@ -1,5 +1,13 @@
 import type { Component } from 'vue'
-import { OfficeBuilding, Odometer } from '@element-plus/icons-vue'
+import {
+  Bell,
+  Goods,
+  Location,
+  OfficeBuilding,
+  Odometer,
+  Position,
+  Shop,
+} from '@element-plus/icons-vue'
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 import { useAuthStore } from '@/stores/auth'
@@ -52,6 +60,40 @@ const routes: RouteRecordRaw[] = [
         name: 'MallZones',
         component: () => import('@/views/mall/zone.vue'),
         meta: { title: '分区管理', hidden: true, roles: ['ADMIN', 'STAFF'] },
+      },
+      {
+        path: 'space',
+        name: 'Space',
+        component: () => import('@/views/space/index.vue'),
+        meta: { title: '车位管理', icon: Position, roles: ['ADMIN', 'STAFF'] },
+      },
+      {
+        path: 'shop',
+        name: 'Shop',
+        component: () => import('@/views/shop/index.vue'),
+        meta: {
+          title: '商铺管理',
+          icon: Shop,
+          roles: ['ADMIN', 'STAFF', 'MERCHANT'],
+        },
+      },
+      {
+        path: 'shop-category',
+        name: 'ShopCategory',
+        component: () => import('@/views/shop/category.vue'),
+        meta: { title: '商铺分类', icon: Goods, roles: ['ADMIN', 'STAFF'] },
+      },
+      {
+        path: 'poi',
+        name: 'Poi',
+        component: () => import('@/views/poi/index.vue'),
+        meta: { title: '设施管理', icon: Location, roles: ['ADMIN', 'STAFF'] },
+      },
+      {
+        path: 'beacon',
+        name: 'Beacon',
+        component: () => import('@/views/beacon/index.vue'),
+        meta: { title: '信标管理', icon: Bell, roles: ['ADMIN', 'STAFF'] },
       },
       {
         path: '403',

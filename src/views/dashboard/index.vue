@@ -35,7 +35,9 @@
             <el-descriptions-item label="网关地址">http://127.0.0.1:8081</el-descriptions-item>
             <el-descriptions-item label="接口约定">全部 POST + JSON，satoken 鉴权</el-descriptions-item>
             <el-descriptions-item label="契约来源">docs/API_CONTRACT/openapi-*.json</el-descriptions-item>
-            <el-descriptions-item label="当前模块">auth / mall / floor / zone</el-descriptions-item>
+            <el-descriptions-item label="当前模块">
+              auth / mall / floor / zone / space / shop / poi / beacon / file
+            </el-descriptions-item>
           </el-descriptions>
         </el-card>
       </el-col>

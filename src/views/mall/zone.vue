@@ -116,6 +116,7 @@ import {
 } from '@/api/mall'
 import { useLocalPaging } from '@/composables/useLocalPaging'
 import type { MallZone, MallZoneForm } from '@/types/mall'
+import { eqId } from '@/utils/id'
 
 const route = useRoute()
 const router = useRouter()
@@ -146,9 +147,9 @@ const rules: FormRules = {
   zoneName: [{ required: true, message: '请输入分区名称', trigger: 'blur' }],
 }
 
-// 后端 zone/page 为无条件全量分页，按当前楼层本地过滤
+// 后端 zone/page 为无条件全量分页，按当前楼层本地过滤（雪花 ID 跨表示比较用 eqId）
 const floorZones = computed(() =>
-  allZones.value.filter((z) => z.floorId === floorId),
+  allZones.value.filter((z) => eqId(z.floorId, floorId)),
 )
 const { pageNum, pageSize, total, paged } = useLocalPaging(
   () => floorZones.value,

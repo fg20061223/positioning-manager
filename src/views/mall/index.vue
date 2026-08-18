@@ -2,16 +2,10 @@
   <div class="page">
     <el-card shadow="never">
       <div class="toolbar">
-        <el-input
-          v-model="keyword"
-          placeholder="搜索商场名称 / 编码"
-          clearable
-          style="width: 260px"
-        />
         <el-button type="primary" :icon="Plus" @click="openCreate">新建商场</el-button>
       </div>
 
-      <el-table v-loading="loading" :data="paged" border stripe>
+      <el-table v-loading="loading" :data="records" border stripe>
         <el-table-column prop="id" label="ID" width="170" />
         <el-table-column prop="mallCode" label="商场编码" width="110" />
         <el-table-column prop="mallName" label="商场名称" min-width="150" show-overflow-tooltip />
@@ -44,6 +38,8 @@
           :total="total"
           :page-sizes="[10, 20, 50, 100]"
           layout="total, sizes, prev, pager, next, jumper"
+          @current-change="load"
+          @size-change="onSizeChange"
         />
       </div>
     </el-card>
@@ -131,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Plus } from '@element-plus/icons-vue'
 import {
@@ -144,18 +140,20 @@ import {
 import {
   mallCreate,
   mallDelete,
+  mallGet,
   mallPage,
   mallUpdate,
 } from '@/api/mall'
-import { useLocalPaging } from '@/composables/useLocalPaging'
 import type { Mall, MallForm } from '@/types/mall'
 
 const router = useRouter()
 
 const loading = ref(false)
 const saving = ref(false)
-const keyword = ref('')
 const records = ref<Mall[]>([])
+const total = ref(0)
+const pageNum = ref(1)
+const pageSize = ref(10)
 const dialogVisible = ref(false)
 const editingId = ref<number | null>(null)
 const formRef = ref<FormInstance>()
@@ -179,30 +177,20 @@ const rules: FormRules = {
   mallName: [{ required: true, message: '请输入商场名称', trigger: 'blur' }],
 }
 
-const filtered = computed(() => {
-  const kw = keyword.value.trim().toLowerCase()
-  if (!kw) return records.value
-  return records.value.filter(
-    (m) =>
-      m.mallName.toLowerCase().includes(kw) ||
-      m.mallCode.toLowerCase().includes(kw),
-  )
-})
-
-const { pageNum, pageSize, total, paged, resetPage } = useLocalPaging(
-  () => filtered.value,
-)
-
-watch(keyword, () => resetPage())
-
+/** 服务端分页：pageSize 默认 10（与页面渲染条数一致），翻页/改页大小均重新请求 */
 async function load() {
   loading.value = true
   try {
-    const data = await mallPage({ pageNum: 1, pageSize: 1000 })
+    const data = await mallPage({ pageNum: pageNum.value, pageSize: pageSize.value })
     records.value = data.records
+    total.value = data.total
   } finally {
     loading.value = false
   }
+}
+function onSizeChange() {
+  pageNum.value = 1
+  load()
 }
 
 function openCreate() {
@@ -211,10 +199,12 @@ function openCreate() {
   dialogVisible.value = true
 }
 
-function openEdit(row: unknown) {
+/** 编辑时通过 /business/mall/get 拉取最新商场信息（不依赖分页列表数据） */
+async function openEdit(row: unknown) {
   const r = row as Mall
   editingId.value = r.id
-  Object.assign(form, emptyForm(), r)
+  const detail = await mallGet(r.id)
+  Object.assign(form, emptyForm(), detail)
   dialogVisible.value = true
 }
 

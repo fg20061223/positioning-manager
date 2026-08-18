@@ -1,3 +1,4 @@
+import JSONbig from 'json-bigint'
 import axios, { type AxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
 
@@ -10,11 +11,41 @@ export interface ApiResult<T = unknown> {
   data: T
 }
 
+// 大整数（雪花 ID）解析为原生 BigInt，避免 JSON.parse 丢精度
+const JSONBigInt = JSONbig({ useNativeBigInt: true })
+
+/** BigInt -> 字符串，保证 JSON.stringify 可序列化 */
+function bigintReplacer(_key: string, value: unknown) {
+  return typeof value === 'bigint' ? value.toString() : value
+}
+
 const service = axios.create({
-  // 开发默认 /api（Vite 代理剥前缀转发网关）；生产可用 VITE_API_BASE 指向网关
+  // 开发默认 /api（代理剥前缀转发网关）；生产可用 VITE_API_BASE 指向网关
   baseURL: import.meta.env.VITE_API_BASE || '/api',
   timeout: 15000,
 })
+
+// 响应解析：默认 JSON.parse 改为 json-bigint（雪花 ID 精度无损）
+service.defaults.transformResponse = [
+  (data) => {
+    if (typeof data !== 'string' || !data) return data
+    try {
+      return JSONBigInt.parse(data)
+    } catch {
+      return data
+    }
+  },
+]
+
+// 请求序列化：FormData 原样透传（上传），对象用大整数安全序列化
+service.defaults.transformRequest = [
+  (data, headers) => {
+    if (data instanceof FormData) return data
+    if (data == null || typeof data === 'string') return data
+    headers.setContentType('application/json')
+    return JSON.stringify(data, bigintReplacer)
+  },
+]
 
 /** 登录失效后的统一处理（清除本地态并回登录页） */
 function handleUnauthorized(message: string) {

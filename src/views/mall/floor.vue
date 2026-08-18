@@ -30,7 +30,8 @@
         </el-table-column>
         <el-table-column label="平面图" width="90">
           <template #default="{ row }">
-            <el-tag v-if="row.imageUrl" type="success" size="small">已上传</el-tag>
+            <el-tag v-if="hasCalibration(row.remark)" type="warning" size="small">已标定</el-tag>
+            <el-tag v-else-if="row.imageUrl" type="success" size="small">已上传</el-tag>
             <el-tag v-else type="info" size="small">未上传</el-tag>
           </template>
         </el-table-column>
@@ -115,6 +116,12 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-form-item label="平面图">
+          <FloorImageUpload
+            v-model:image-url="form.imageUrl"
+            v-model:calibration="calibration"
+          />
+        </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="form.remark" type="textarea" :rows="2" />
         </el-form-item>
@@ -145,6 +152,8 @@ import {
   floorUpdate,
   mallGet,
 } from '@/api/mall'
+import FloorImageUpload from '@/components/FloorImageUpload.vue'
+import type { Calibration } from '@/types/file'
 import type { MallFloor, MallFloorForm } from '@/types/mall'
 
 const route = useRoute()
@@ -167,9 +176,12 @@ const emptyForm = (): MallFloorForm => ({
   status: 1,
   widthM: undefined,
   heightM: undefined,
+  imageUrl: '',
   remark: '',
 })
 const form = reactive<MallFloorForm>(emptyForm())
+/** 平面图标定参数（随 remark JSON 一起保存，见 mergeRemark） */
+const calibration = ref<Calibration | null>(null)
 
 const rules: FormRules = {
   floorCode: [{ required: true, message: '请输入楼层编码', trigger: 'blur' }],
@@ -190,6 +202,7 @@ async function load() {
 function openCreate() {
   editingId.value = null
   Object.assign(form, emptyForm())
+  calibration.value = null
   dialogVisible.value = true
 }
 
@@ -197,6 +210,9 @@ function openEdit(row: unknown) {
   const r = row as MallFloor
   editingId.value = r.id
   Object.assign(form, emptyForm(), r)
+  // remark 可能存的是 {calibration, note} JSON（见 mergeRemark）
+  form.remark = parseNote(r.remark)
+  calibration.value = parseCalibration(r.remark)
   dialogVisible.value = true
 }
 
@@ -207,11 +223,18 @@ async function onSubmit() {
 
   saving.value = true
   try {
+    const payload: MallFloorForm = { ...form }
+    if (calibration.value) {
+      payload.remark = JSON.stringify({
+        calibration: calibration.value,
+        note: form.remark || '',
+      })
+    }
     if (editingId.value) {
-      await floorUpdate({ ...form, id: editingId.value })
+      await floorUpdate({ ...payload, id: editingId.value })
       ElMessage.success('修改成功')
     } else {
-      await floorCreate({ ...form })
+      await floorCreate({ ...payload })
       ElMessage.success('新增成功')
     }
     dialogVisible.value = false
@@ -242,6 +265,31 @@ function goZones(row: unknown) {
 
 function back() {
   router.push('/mall')
+}
+
+/* ---------- 平面图标定（存入 remark JSON） ---------- */
+function parseCalibration(remark?: string): Calibration | null {
+  if (!remark) return null
+  try {
+    const o = JSON.parse(remark)
+    if (o && o.calibration) return o.calibration as Calibration
+  } catch {
+    // 普通文本备注
+  }
+  return null
+}
+function parseNote(remark?: string): string {
+  if (!remark) return ''
+  try {
+    const o = JSON.parse(remark)
+    if (o && o.calibration) return (o.note as string) ?? ''
+  } catch {
+    // 普通文本备注
+  }
+  return remark
+}
+function hasCalibration(remark?: string): boolean {
+  return parseCalibration(remark) !== null
 }
 
 load()
