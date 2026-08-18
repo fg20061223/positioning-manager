@@ -1,0 +1,62 @@
+import { http } from '@/utils/request'
+import type { IdRequest, PageQuery, PageResult } from '@/types/result'
+import type { Mall, MallFloor, MallZone } from '@/types/mall'
+
+/* ---------------- 商场 mall ---------------- */
+export function mallPage(query?: PageQuery) {
+  return http.post<PageResult<Mall>>('/business/mall/page', query ?? {})
+}
+export function mallGet(id: number) {
+  return http.post<Mall>('/business/mall/get', { id } satisfies IdRequest)
+}
+export function mallCreate(data: Partial<Mall>) {
+  return http.post<Mall>('/business/mall/create', data)
+}
+export function mallUpdate(data: Partial<Mall>) {
+  return http.post<Mall>('/business/mall/update', data)
+}
+export function mallDelete(id: number) {
+  return http.post<void>('/business/mall/delete', { id } satisfies IdRequest)
+}
+
+/* ---------------- 楼层 floor ---------------- */
+/** 按商场查询楼层列表（按排序号升序） */
+export function floorByMall(mallId: number) {
+  return http.post<MallFloor[]>('/business/floor/by-mall', { id: mallId } satisfies IdRequest)
+}
+export function floorPage(query?: PageQuery) {
+  return http.post<PageResult<MallFloor>>('/business/floor/page', query ?? {})
+}
+export function floorGet(id: number) {
+  return http.post<MallFloor>('/business/floor/get', { id } satisfies IdRequest)
+}
+export function floorCreate(data: Partial<MallFloor>) {
+  return http.post<MallFloor>('/business/floor/create', data)
+}
+export function floorUpdate(data: Partial<MallFloor>) {
+  return http.post<MallFloor>('/business/floor/update', data)
+}
+export function floorDelete(id: number) {
+  return http.post<void>('/business/floor/delete', { id } satisfies IdRequest)
+}
+
+/* ---------------- 分区 zone ---------------- */
+/**
+ * 分区分页。注意：后端 /page 为无条件全量分页（BaseCrudController emptyWrapper），
+ * 前端按 floorId 本地过滤（见 views/mall/zone.vue）。
+ */
+export function zonePage(query?: PageQuery) {
+  return http.post<PageResult<MallZone>>('/business/zone/page', query ?? {})
+}
+export function zoneGet(id: number) {
+  return http.post<MallZone>('/business/zone/get', { id } satisfies IdRequest)
+}
+export function zoneCreate(data: Partial<MallZone>) {
+  return http.post<MallZone>('/business/zone/create', data)
+}
+export function zoneUpdate(data: Partial<MallZone>) {
+  return http.post<MallZone>('/business/zone/update', data)
+}
+export function zoneDelete(id: number) {
+  return http.post<void>('/business/zone/delete', { id } satisfies IdRequest)
+}
