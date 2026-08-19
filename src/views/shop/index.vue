@@ -10,15 +10,17 @@
           style="width: 160px"
           @change="onMallFilterChange"
         >
-          <el-option v-for="m in malls" :key="m.id" :label="m.mallName" :value="m.id" />
+          <el-option v-for="m in malls" :key="m.id" :label="m.name" :value="m.id" />
         </el-select>
         <el-select
+          v-if="filters.mallId"
           v-model="filters.floorId"
           placeholder="楼层"
           clearable
           style="width: 130px"
+          @change="load"
         >
-          <el-option v-for="f in floors" :key="f.id" :label="f.floorName" :value="f.id" />
+          <el-option v-for="f in floors" :key="f.id" :label="f.name" :value="f.id" />
         </el-select>
         <el-select
           v-model="filters.categoryId"
@@ -26,7 +28,7 @@
           clearable
           style="width: 140px"
         >
-          <el-option v-for="c in categoriesOfMall(filters.mallId)" :key="c.id" :label="c.catName" :value="c.id" />
+          <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
         </el-select>
         <el-select v-model="filters.status" placeholder="状态" clearable style="width: 110px">
           <el-option v-for="s in SHOP_STATUS_OPTIONS" :key="s.value" :label="s.label" :value="s.value" />
@@ -97,14 +99,19 @@
           <el-col :span="12">
             <el-form-item label="商场" prop="mallId">
               <el-select v-model="form.mallId" style="width: 100%" @change="onMallFormChange">
-                <el-option v-for="m in malls" :key="m.id" :label="m.mallName" :value="m.id" />
+                <el-option v-for="m in malls" :key="m.id" :label="m.name" :value="m.id" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="楼层" prop="floorId">
-              <el-select v-model="form.floorId" style="width: 100%" @change="onFloorFormChange">
-                <el-option v-for="f in floors" :key="f.id" :label="f.floorName" :value="f.id" />
+              <el-select
+                v-if="form.mallId"
+                v-model="form.floorId"
+                style="width: 100%"
+                @change="onFloorFormChange"
+              >
+                <el-option v-for="f in floors" :key="f.id" :label="f.name" :value="f.id" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -113,7 +120,7 @@
           <el-col :span="12">
             <el-form-item label="分区">
               <el-select v-model="form.zoneId" clearable placeholder="可选" style="width: 100%">
-                <el-option v-for="z in zonesOfFloor(form.floorId)" :key="z.id" :label="z.zoneName" :value="z.id" />
+                <el-option v-for="z in zones" :key="z.id" :label="z.name" :value="z.id" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -139,7 +146,7 @@
           <el-col :span="12">
             <el-form-item label="分类">
               <el-select v-model="form.categoryId" clearable placeholder="可选" style="width: 100%">
-                <el-option v-for="c in categoriesOfMall(form.mallId)" :key="c.id" :label="c.catName" :value="c.id" />
+                <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -236,13 +243,12 @@ const canEdit = computed(() => ['ADMIN', 'STAFF'].includes(auth.userType))
 const {
   malls,
   floors,
+  zones,
   categories,
   loadMalls,
   loadFloors,
   loadZones,
   loadCategories,
-  zonesOfFloor,
-  categoriesOfMall,
 } = useMallData()
 
 const loading = ref(false)
@@ -283,6 +289,7 @@ function onMallFilterChange() {
   filters.floorId = undefined
   filters.categoryId = undefined
   loadFloors(filters.mallId)
+  loadCategories(filters.mallId)
   load()
 }
 function onSizeChange() {
@@ -325,9 +332,12 @@ function onMallFormChange() {
   form.zoneId = undefined
   form.categoryId = undefined
   loadFloors(form.mallId)
+  loadZones(undefined)
+  loadCategories(form.mallId)
 }
 function onFloorFormChange() {
   form.zoneId = undefined
+  loadZones(form.floorId)
 }
 
 function openCreate() {
@@ -424,10 +434,10 @@ async function onSaveGeometry() {
 
 /* ---------- 字典取值 ---------- */
 function categoryName(id?: number) {
-  return categories.value.find((c) => c.id === id)?.catName ?? id ?? '-'
+  return categories.value.find((c) => c.id === id)?.name ?? id ?? '-'
 }
 function floorName(id?: number) {
-  return floors.value.find((f) => f.id === id)?.floorName ?? id ?? '-'
+  return floors.value.find((f) => f.id === id)?.name ?? id ?? '-'
 }
 function shopStatusLabel(s?: ShopStatus) {
   return SHOP_STATUS_OPTIONS.find((o) => o.value === s)?.label ?? s ?? '-'
@@ -450,7 +460,6 @@ watch(
 )
 
 loadMalls()
-loadZones()
 loadCategories()
 load()
 </script>

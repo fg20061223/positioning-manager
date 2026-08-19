@@ -64,7 +64,7 @@
         </el-form-item>
         <el-form-item label="所属商场">
           <el-select v-model="form.mallId" clearable placeholder="留空 = 平台通用" style="width: 100%">
-            <el-option v-for="m in malls" :key="m.id" :label="m.mallName" :value="m.id" />
+            <el-option v-for="m in malls" :key="m.id" :label="m.name" :value="m.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="父分类">
@@ -107,14 +107,14 @@ import {
   type FormRules,
 } from 'element-plus'
 
-import { mallPage } from '@/api/mall'
+import { mallOptions } from '@/api/mall'
 import {
   shopCategoryCreate,
   shopCategoryDelete,
   shopCategoryPage,
   shopCategoryUpdate,
 } from '@/api/shop'
-import type { Mall } from '@/types/mall'
+import type { OptionVO } from '@/types/result'
 import type { ShopCategory } from '@/types/shop'
 
 const loading = ref(false)
@@ -123,7 +123,7 @@ const records = ref<ShopCategory[]>([])
 const total = ref(0)
 const pageNum = ref(1)
 const pageSize = ref(10)
-const malls = ref<Mall[]>([])
+const malls = ref<OptionVO[]>([])
 
 async function load() {
   loading.value = true
@@ -145,7 +145,7 @@ const parentOptions = computed(() =>
 )
 
 function mallName(id?: number) {
-  return malls.value.find((m) => m.id === id)?.mallName ?? id
+  return malls.value.find((m) => m.id === id)?.name ?? id
 }
 function parentName(id?: number) {
   return records.value.find((c) => c.id === id)?.catName ?? id
@@ -215,7 +215,7 @@ async function onDelete(row: unknown) {
   await load()
 }
 
-mallPage({ pageNum: 1, pageSize: 1000 }).then((d) => (malls.value = d.records))
+mallOptions().then((options) => (malls.value = options))
 load()
 </script>
 

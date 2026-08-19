@@ -10,15 +10,17 @@
           style="width: 160px"
           @change="onMallFilterChange"
         >
-          <el-option v-for="m in malls" :key="m.id" :label="m.mallName" :value="m.id" />
+          <el-option v-for="m in malls" :key="m.id" :label="m.name" :value="m.id" />
         </el-select>
         <el-select
+          v-if="filters.mallId"
           v-model="filters.floorId"
           placeholder="楼层"
           clearable
           style="width: 130px"
+          @change="load"
         >
-          <el-option v-for="f in floors" :key="f.id" :label="f.floorName" :value="f.id" />
+          <el-option v-for="f in floors" :key="f.id" :label="f.name" :value="f.id" />
         </el-select>
         <el-select v-model="filters.status" placeholder="状态" clearable style="width: 120px">
           <el-option v-for="s in SPACE_STATUS_OPTIONS" :key="s.value" :label="s.label" :value="s.value" />
@@ -121,14 +123,19 @@
           <el-col :span="12">
             <el-form-item label="商场" prop="mallId">
               <el-select v-model="form.mallId" style="width: 100%" @change="onMallFormChange">
-                <el-option v-for="m in malls" :key="m.id" :label="m.mallName" :value="m.id" />
+                <el-option v-for="m in malls" :key="m.id" :label="m.name" :value="m.id" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="楼层" prop="floorId">
-              <el-select v-model="form.floorId" style="width: 100%" @change="onFloorFormChange">
-                <el-option v-for="f in floors" :key="f.id" :label="f.floorName" :value="f.id" />
+              <el-select
+                v-if="form.mallId"
+                v-model="form.floorId"
+                style="width: 100%"
+                @change="onFloorFormChange"
+              >
+                <el-option v-for="f in floors" :key="f.id" :label="f.name" :value="f.id" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -137,7 +144,7 @@
           <el-col :span="12">
             <el-form-item label="分区">
               <el-select v-model="form.zoneId" clearable placeholder="可选" style="width: 100%">
-                <el-option v-for="z in zonesOfFloor(form.floorId)" :key="z.id" :label="z.zoneName" :value="z.id" />
+                <el-option v-for="z in zones" :key="z.id" :label="z.name" :value="z.id" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -239,7 +246,7 @@ import {
 const auth = useAuthStore()
 const canEdit = computed(() => ['ADMIN', 'STAFF'].includes(auth.userType))
 
-const { malls, floors, zones, loadMalls, loadFloors, loadZones, zonesOfFloor } =
+const { malls, floors, zones, loadMalls, loadFloors, loadZones } =
   useMallData()
 
 const loading = ref(false)
@@ -341,9 +348,11 @@ function onMallFormChange() {
   form.floorId = undefined
   form.zoneId = undefined
   loadFloors(form.mallId)
+  loadZones(undefined)
 }
 function onFloorFormChange() {
   form.zoneId = undefined
+  loadZones(form.floorId)
 }
 
 function openCreate() {
@@ -478,10 +487,10 @@ function spaceStatusTag(s?: SpaceStatus) {
   return 'info'
 }
 function floorName(id?: number) {
-  return floors.value.find((f) => f.id === id)?.floorName ?? id ?? '-'
+  return floors.value.find((f) => f.id === id)?.name ?? id ?? '-'
 }
 function zoneName(id?: number) {
-  return zones.value.find((z) => z.id === id)?.zoneName ?? id ?? '-'
+  return zones.value.find((z) => z.id === id)?.name ?? id ?? '-'
 }
 
 watch(
@@ -495,7 +504,6 @@ watch(
 )
 
 loadMalls()
-loadZones()
 load()
 </script>
 

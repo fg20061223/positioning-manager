@@ -10,15 +10,16 @@
           style="width: 160px"
           @change="onMallFilterChange"
         >
-          <el-option v-for="m in malls" :key="m.id" :label="m.mallName" :value="m.id" />
+          <el-option v-for="m in malls" :key="m.id" :label="m.name" :value="m.id" />
         </el-select>
         <el-select
+          v-if="filters.mallId"
           v-model="filters.floorId"
           placeholder="楼层"
           clearable
           style="width: 130px"
         >
-          <el-option v-for="f in floors" :key="f.id" :label="f.floorName" :value="f.id" />
+          <el-option v-for="f in floors" :key="f.id" :label="f.name" :value="f.id" />
         </el-select>
         <el-select v-model="filters.poiType" placeholder="类型" clearable style="width: 150px">
           <el-option v-for="t in POI_TYPE_OPTIONS" :key="t.value" :label="t.label" :value="t.value" />
@@ -83,14 +84,18 @@
           <el-col :span="12">
             <el-form-item label="商场" prop="mallId">
               <el-select v-model="form.mallId" style="width: 100%" @change="onMallFormChange">
-                <el-option v-for="m in malls" :key="m.id" :label="m.mallName" :value="m.id" />
+                <el-option v-for="m in malls" :key="m.id" :label="m.name" :value="m.id" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="楼层" prop="floorId">
-              <el-select v-model="form.floorId" style="width: 100%">
-                <el-option v-for="f in floors" :key="f.id" :label="f.floorName" :value="f.id" />
+              <el-select
+                v-if="form.mallId"
+                v-model="form.floorId"
+                style="width: 100%"
+              >
+                <el-option v-for="f in floors" :key="f.id" :label="f.name" :value="f.id" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -267,7 +272,7 @@ function poiTypeLabel(t?: PoiType) {
   return POI_TYPE_OPTIONS.find((o) => o.value === t)?.label ?? t ?? '-'
 }
 function floorName(id?: number) {
-  return floors.value.find((f) => f.id === id)?.floorName ?? id ?? '-'
+  return floors.value.find((f) => f.id === id)?.name ?? id ?? '-'
 }
 
 loadMalls()

@@ -1,11 +1,15 @@
 import { http } from '@/utils/request'
-import type { IdRequest, PageQuery, PageResult } from '@/types/result'
+import type { IdRequest, OptionQuery, OptionVO, PageQuery, PageResult } from '@/types/result'
 import type { Beacon, BeaconQuery, Poi } from '@/types/facility'
 
 /* ---------------- 设施 poi ---------------- */
 /** poi/page 为无条件全量分页（BaseCrudController），前端按 mall/floor 本地过滤 */
 export function poiPage(query?: PageQuery) {
   return http.post<PageResult<Poi>>('/business/poi/page', query ?? {})
+}
+/** 设施下拉数据（仅 id + name，可按商场/楼层过滤） */
+export function poiOptions(query?: OptionQuery) {
+  return http.post<OptionVO[]>('/business/poi/options', query ?? {})
 }
 export function poiGet(id: number) {
   return http.post<Poi>('/business/poi/get', { id } satisfies IdRequest)

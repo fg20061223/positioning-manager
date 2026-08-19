@@ -1,5 +1,5 @@
 import { http } from '@/utils/request'
-import type { IdRequest, PageQuery, PageResult } from '@/types/result'
+import type { IdRequest, OptionQuery, OptionVO, PageQuery, PageResult } from '@/types/result'
 import type {
   Shop,
   ShopCategory,
@@ -54,4 +54,8 @@ export function shopCategoryUpdate(data: Partial<ShopCategory>) {
 }
 export function shopCategoryDelete(id: number) {
   return http.post<void>('/business/shop-category/delete', { id } satisfies IdRequest)
+}
+/** 商铺分类下拉数据（仅 id + name，可按商场过滤） */
+export function shopCategoryOptions(query?: OptionQuery) {
+  return http.post<OptionVO[]>('/business/shop-category/options', query ?? {})
 }

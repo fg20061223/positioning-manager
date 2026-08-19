@@ -27,3 +27,17 @@ export interface PageQuery {
 export interface IdRequest {
   id: number
 }
+
+/** 通用下拉（options）入参：可按商场/楼层过滤接口通用 */
+export interface OptionQuery {
+  mallId?: number
+  floorId?: number
+}
+
+/** 通用下拉选项：id + name（用于下拉框，对应后端 OptionVO） */
+export interface OptionVO {
+  /** 选项ID（雪花接口可能为大整数，用原生 BigInt） */
+  id: number
+  /** 选项名称 */
+  name: string
+}
