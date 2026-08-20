@@ -11,7 +11,36 @@
         </div>
       </template>
 
-      <el-table v-loading="loading" :data="paged" border stripe>
+      <!-- 查询条件：楼层下拉（切换楼层）+ 分区编码/名称（后端模糊） -->
+      <div class="toolbar">
+        <el-select
+          :model-value="floorId"
+          placeholder="楼层"
+          style="width: 140px"
+          @change="onFloorSwitch"
+        >
+          <el-option v-for="f in floorOptionsList" :key="f.id" :label="f.name" :value="f.id" />
+        </el-select>
+        <el-input
+          v-model="filters.zoneCode"
+          placeholder="分区编码"
+          clearable
+          style="width: 140px"
+          @keyup.enter="onSearch"
+          @clear="onSearch"
+        />
+        <el-input
+          v-model="filters.zoneName"
+          placeholder="分区名称"
+          clearable
+          style="width: 160px"
+          @keyup.enter="onSearch"
+          @clear="onSearch"
+        />
+        <el-button type="primary" :icon="Search" @click="onSearch">查询</el-button>
+      </div>
+
+      <el-table v-loading="loading" :data="records" border stripe>
         <el-table-column prop="id" label="ID" width="170" />
         <el-table-column prop="zoneCode" label="分区编码" width="110" />
         <el-table-column prop="zoneName" label="分区名称" min-width="140" />
@@ -38,6 +67,8 @@
           :total="total"
           :page-sizes="[10, 20, 50]"
           layout="total, sizes, prev, pager, next, jumper"
+          @current-change="load"
+          @size-change="onSizeChange"
         />
       </div>
     </el-card>
@@ -96,9 +127,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Plus } from '@element-plus/icons-vue'
+import { ArrowLeft, Plus, Search } from '@element-plus/icons-vue'
 import {
   ElMessage,
   ElMessageBox,
@@ -108,32 +139,40 @@ import {
 
 import {
   floorGet,
+  floorOptions,
   mallGet,
+  mallOptions,
   zoneCreate,
   zoneDelete,
-  zonePage,
+  zoneQuery,
   zoneUpdate,
 } from '@/api/mall'
-import { useLocalPaging } from '@/composables/useLocalPaging'
 import type { MallZone, MallZoneForm } from '@/types/mall'
-import { eqId } from '@/utils/id'
 
 const route = useRoute()
 const router = useRouter()
-const mallId = Number(route.params.mallId)
-const floorId = Number(route.params.floorId)
 
 const loading = ref(false)
 const saving = ref(false)
 const contextName = ref('分区管理')
-const allZones = ref<MallZone[]>([])
+const records = ref<MallZone[]>([])
+const total = ref(0)
+const pageNum = ref(1)
+const pageSize = ref(10)
 const dialogVisible = ref(false)
 const editingId = ref<number | null>(null)
 const formRef = ref<FormInstance>()
 
+/** 当前商场/楼层ID：来自路由；从菜单 /zones 进入时为空，加载时定位默认商场+楼层 */
+const mallId = ref<number | null>(Number(route.params.mallId) || null)
+const floorId = ref<number | null>(Number(route.params.floorId) || null)
+
+// 该商场楼层下拉（切换楼层跳转）
+const floorOptionsList = ref<{ id: number; name: string }[]>([])
+
 const emptyForm = (): MallZoneForm => ({
-  mallId,
-  floorId,
+  mallId: mallId.value ?? 0,
+  floorId: floorId.value ?? 0,
   zoneCode: '',
   zoneName: '',
   color: '#409eff',
@@ -147,28 +186,65 @@ const rules: FormRules = {
   zoneName: [{ required: true, message: '请输入分区名称', trigger: 'blur' }],
 }
 
-// 后端 zone/page 为无条件全量分页，按当前楼层本地过滤（雪花 ID 跨表示比较用 eqId）
-const floorZones = computed(() =>
-  allZones.value.filter((z) => eqId(z.floorId, floorId)),
-)
-const { pageNum, pageSize, total, paged } = useLocalPaging(
-  () => floorZones.value,
-)
+// 查询条件（分区编码/名称，后端模糊；mallId/floorId 固定来自路由）
+const filters = reactive<{ zoneCode?: string; zoneName?: string }>({
+  zoneCode: undefined,
+  zoneName: undefined,
+})
 
+/** 确认当前商场/楼层：无参数（从菜单 /zones 进入）时取第一个商场的第一个楼层并修正 URL */
+async function ensureContext(): Promise<boolean> {
+  if (mallId.value && floorId.value) return true
+  const malls = await mallOptions().catch(() => [])
+  if (!malls.length) return false
+  const mid = Number(malls[0].id)
+  const floors = await floorOptions({ mallId: mid }).catch(() => [])
+  const fid = floors.length ? Number(floors[0].id) : 0
+  mallId.value = mid
+  floorId.value = fid
+  router.replace(`/mall/${mid}/floor/${fid}/zones`)
+  return true
+}
+
+/** 服务端条件分页：zone/query */
 async function load() {
   loading.value = true
   try {
-    const mall = await mallGet(mallId).catch(() => null)
-    const floor = await floorGet(floorId).catch(() => null)
-    const parts = [
-      mall?.mallName ?? `商场 #${mallId}`,
-      floor?.floorName ?? `楼层 #${floorId}`,
-    ]
-    contextName.value = parts.join(' / ')
-    const data = await zonePage({ pageNum: 1, pageSize: 1000 })
-    allZones.value = data.records
+    if (!(await ensureContext())) {
+      contextName.value = '暂无数据'
+      records.value = []
+      total.value = 0
+      return
+    }
+    const data = await zoneQuery({
+      pageNum: pageNum.value,
+      pageSize: pageSize.value,
+      mallId: mallId.value ?? undefined,
+      floorId: floorId.value ?? undefined,
+      zoneCode: filters.zoneCode?.trim() || undefined,
+      zoneName: filters.zoneName?.trim() || undefined,
+    })
+    records.value = data.records
+    total.value = data.total
   } finally {
     loading.value = false
+  }
+}
+
+/** 查询按钮：回到第一页再查询 */
+function onSearch() {
+  pageNum.value = 1
+  load()
+}
+function onSizeChange() {
+  pageNum.value = 1
+  load()
+}
+
+/** 切换楼层 -> 跳转到该楼层分区页 */
+function onFloorSwitch(id: number) {
+  if (id && id !== floorId.value) {
+    router.push(`/mall/${mallId.value}/floor/${id}/zones`)
   }
 }
 
@@ -221,10 +297,37 @@ async function onDelete(row: unknown) {
 }
 
 function back() {
-  router.push(`/mall/${mallId}/floors`)
+  router.push(`/mall/${mallId.value}/floors`)
 }
 
-load()
+/** 初始化：上下文名称（商场/楼层）+ 楼层下拉选项 */
+async function init() {
+  const [mall, floor, opts] = await Promise.all([
+    mallGet(mallId.value ?? 0).catch(() => null),
+    floorGet(floorId.value ?? 0).catch(() => null),
+    floorOptions({ mallId: mallId.value ?? undefined }),
+  ])
+  const parts = [
+    mall?.mallName ?? `商场 #${mallId.value ?? '-'}`,
+    floor?.floorName ?? `楼层 #${floorId.value ?? '-'}`,
+  ]
+  contextName.value = parts.join(' / ')
+  floorOptionsList.value = opts
+}
+
+// 路由参数变化（含 /zones 无参进入时自动修正）时刷新上下文与列表
+watch(
+  () => [route.params.mallId, route.params.floorId],
+  () => {
+    const m = Number(route.params.mallId)
+    const f = Number(route.params.floorId)
+    mallId.value = Number.isFinite(m) && m > 0 ? m : null
+    floorId.value = Number.isFinite(f) && f > 0 ? f : null
+    init()
+    load()
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>

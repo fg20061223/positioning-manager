@@ -1,6 +1,7 @@
 import type { Component } from 'vue'
 import {
   Bell,
+  Collection,
   Goods,
   Location,
   OfficeBuilding,
@@ -60,6 +61,12 @@ const routes: RouteRecordRaw[] = [
         name: 'MallZones',
         component: () => import('@/views/mall/zone.vue'),
         meta: { title: '分区管理', hidden: true, roles: ['ADMIN', 'STAFF'] },
+      },
+      {
+        path: 'dict',
+        name: 'Dict',
+        component: () => import('@/views/dict/index.vue'),
+        meta: { title: '字典管理', icon: Collection, roles: ['ADMIN', 'STAFF'] },
       },
       {
         path: 'space',

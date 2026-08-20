@@ -73,3 +73,46 @@ export interface MallZone {
 export type MallForm = Omit<Mall, 'id' | 'createdAt' | 'updatedAt' | 'deleted'>
 export type MallFloorForm = Omit<MallFloor, 'id' | 'createdAt' | 'updatedAt' | 'deleted'>
 export type MallZoneForm = Omit<MallZone, 'id' | 'createdAt' | 'updatedAt' | 'deleted'>
+
+/** 商场条件分页入参（/business/mall/query） */
+export interface MallQuery {
+  pageNum?: number
+  pageSize?: number
+  /** 商场编码（模糊） */
+  mallCode?: string
+  /** 商场名称（模糊） */
+  mallName?: string
+  province?: string
+  city?: string
+  district?: string
+  /** 详细地址（模糊） */
+  address?: string
+  /** 状态: 1=营业 0=停用 */
+  status?: number
+}
+
+/** 分区条件分页入参（/business/zone/query） */
+export interface ZoneQuery {
+  pageNum?: number
+  pageSize?: number
+  mallId?: number
+  floorId?: number
+  /** 分区编码（模糊） */
+  zoneCode?: string
+  /** 分区名称（模糊） */
+  zoneName?: string
+}
+
+/** 按商场查询楼层列表入参（/business/floor/by-mall） */
+export interface FloorByMallQuery {
+  /** 商场ID（推荐） */
+  mallId?: number
+  /** 商场ID（兼容旧入参 {"id":1}） */
+  id?: number
+  /** 楼层编码（模糊） */
+  floorCode?: string
+  /** 楼层名称（模糊） */
+  floorName?: string
+  /** 排序号（精确匹配） */
+  sortOrder?: number
+}

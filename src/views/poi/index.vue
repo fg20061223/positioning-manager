@@ -29,8 +29,10 @@
           placeholder="设施名称"
           clearable
           style="width: 180px"
-          @input="resetPage"
+          @keyup.enter="onSearch"
+          @clear="resetPage"
         />
+        <el-button type="primary" :icon="Search" @click="onSearch">查询</el-button>
         <div class="spacer" />
         <el-button type="primary" :icon="Plus" @click="openCreate">新建设施</el-button>
       </div>
@@ -134,7 +136,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Search } from '@element-plus/icons-vue'
 import {
   ElMessage,
   ElMessageBox,
@@ -195,6 +197,11 @@ async function load() {
 function onMallFilterChange() {
   filters.floorId = undefined
   loadFloors(filters.mallId)
+}
+
+/** 查询按钮：分页回到第一页（列表为本地过滤，筛选实时生效） */
+function onSearch() {
+  resetPage()
 }
 
 /* ---------- CRUD ---------- */

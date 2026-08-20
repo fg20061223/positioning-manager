@@ -31,11 +31,32 @@
         >
           <el-option v-for="s in beaconStatusOptions" :key="s.code" :label="s.label" :value="s.code" />
         </el-select>
+        <el-input
+          v-model="keyword"
+          placeholder="UUID / MAC"
+          clearable
+          style="width: 200px"
+          @keyup.enter="onSearch"
+          @clear="load"
+        />
+        <el-button type="primary" :icon="Search" @click="onSearch">查询</el-button>
         <div class="spacer" />
         <el-button type="primary" :icon="Plus" @click="openCreate">新建信标</el-button>
       </div>
 
-      <el-table v-loading="loading" :data="records" border stripe>
+      <el-alert
+        v-if="searchMode"
+        type="info"
+        :closable="false"
+        class="search-tip"
+      >
+        <template #title>
+          UUID/MAC 搜索「{{ keyword }}」共 {{ searchResults.length }} 条
+          <el-button link type="primary" @click="clearSearch">清除搜索</el-button>
+        </template>
+      </el-alert>
+
+      <el-table v-loading="loading" :data="tableData" border stripe>
         <el-table-column prop="id" label="ID" width="170" />
         <el-table-column label="UUID" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">{{ row.uuid || '-' }}</template>
@@ -66,7 +87,7 @@
         </el-table-column>
       </el-table>
 
-      <div class="table-pagination">
+      <div v-if="!searchMode" class="table-pagination">
         <el-pagination
           v-model:current-page="pageNum"
           v-model:page-size="pageSize"
@@ -168,7 +189,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Search } from '@element-plus/icons-vue'
 import {
   ElMessage,
   ElMessageBox,
@@ -203,6 +224,9 @@ const records = ref<Beacon[]>([])
 const total = ref(0)
 const pageNum = ref(1)
 const pageSize = ref(10)
+const keyword = ref('')
+const searchMode = ref(false)
+const searchResults = ref<Beacon[]>([])
 
 const filters = reactive<BeaconQuery>({
   mallId: undefined,
@@ -210,22 +234,58 @@ const filters = reactive<BeaconQuery>({
   status: '',
 })
 
+/** 表格数据：搜索模式显示搜索结果，否则服务端分页数据 */
+const tableData = computed(() => (searchMode.value ? searchResults.value : records.value))
+
 async function load() {
   loading.value = true
   try {
-    const data = await beaconQuery({
-      pageNum: pageNum.value,
-      pageSize: pageSize.value,
-      mallId: filters.mallId,
-      floorId: filters.floorId,
-      status: filters.status || undefined,
-    })
-    records.value = data.records
-    total.value = data.total
+    const kw = keyword.value.trim()
+    if (kw) {
+      // 搜索模式：带筛选条件全量拉取后按 UUID/MAC 前端过滤（后端 query 无关键词条件）
+      const data = await beaconQuery({
+        pageNum: 1,
+        pageSize: 1000,
+        mallId: filters.mallId,
+        floorId: filters.floorId,
+        status: filters.status || undefined,
+      })
+      const lower = kw.toLowerCase()
+      searchResults.value = data.records.filter(
+        (b) =>
+          (b.uuid || '').toLowerCase().includes(lower) ||
+          (b.mac || '').toLowerCase().includes(lower),
+      )
+      searchMode.value = true
+    } else {
+      const data = await beaconQuery({
+        pageNum: pageNum.value,
+        pageSize: pageSize.value,
+        mallId: filters.mallId,
+        floorId: filters.floorId,
+        status: filters.status || undefined,
+      })
+      records.value = data.records
+      total.value = data.total
+      searchMode.value = false
+    }
   } finally {
     loading.value = false
   }
 }
+
+/** 查询按钮 */
+function onSearch() {
+  load()
+}
+
+/** 清除搜索：恢复服务端分页 */
+function clearSearch() {
+  keyword.value = ''
+  pageNum.value = 1
+  load()
+}
+
 function onMallFilterChange() {
   filters.floorId = undefined
   loadFloors(filters.mallId)

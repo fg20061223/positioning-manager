@@ -3,6 +3,7 @@ import type { IdRequest, OptionQuery, OptionVO, PageQuery, PageResult } from '@/
 import type {
   Shop,
   ShopCategory,
+  ShopCategoryQuery,
   ShopGeometryRequest,
   ShopGeometryVO,
   ShopQuery,
@@ -42,6 +43,10 @@ export function shopUpdateGeometry(req: ShopGeometryRequest) {
 /* ---------------- 商铺分类 shop-category ---------------- */
 export function shopCategoryPage(query?: PageQuery) {
   return http.post<PageResult<ShopCategory>>('/business/shop-category/page', query ?? {})
+}
+/** 商铺分类条件分页：分类名称（模糊）+ 所属商场 + 父分类 */
+export function shopCategoryQuery(query?: ShopCategoryQuery) {
+  return http.post<PageResult<ShopCategory>>('/business/shop-category/query', query ?? {})
 }
 export function shopCategoryGet(id: number) {
   return http.post<ShopCategory>('/business/shop-category/get', { id } satisfies IdRequest)

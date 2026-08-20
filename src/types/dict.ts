@@ -43,4 +43,6 @@ export const DICT_TYPES = {
   POI_TYPE: 'poi_type',
   BEACON_TYPE: 'beacon_type',
   BEACON_STATUS: 'beacon_status',
+  MALL_STATUS: 'mall_status',
+  FLOOR_STATUS: 'floor_status',
 } as const

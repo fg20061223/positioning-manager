@@ -1,12 +1,38 @@
 <template>
   <div class="page">
     <el-card shadow="never">
-      <template #header>
-        <div class="page-header">
-          <span class="page-title">商铺分类</span>
-          <el-button type="primary" :icon="Plus" @click="openCreate">新建分类</el-button>
-        </div>
-      </template>
+      <!-- 第一行：所属商场/父分类下拉 + 分类名称 + 查询 + 新建分类 -->
+      <div class="toolbar">
+        <el-select
+          v-model="filters.mallId"
+          placeholder="所属商场"
+          clearable
+          style="width: 150px"
+          @change="onSearch"
+        >
+          <el-option v-for="m in malls" :key="m.id" :label="m.name" :value="m.id" />
+        </el-select>
+        <el-select
+          v-model="filters.parentId"
+          placeholder="父分类"
+          clearable
+          style="width: 150px"
+          @change="onSearch"
+        >
+          <el-option v-for="c in allCategories" :key="c.id" :label="c.catName" :value="c.id" />
+        </el-select>
+        <el-input
+          v-model="filters.catName"
+          placeholder="分类名称"
+          clearable
+          style="width: 160px"
+          @keyup.enter="onSearch"
+          @clear="onSearch"
+        />
+        <el-button type="primary" :icon="Search" @click="onSearch">查询</el-button>
+        <div class="spacer" />
+        <el-button type="primary" :icon="Plus" @click="openCreate">新建分类</el-button>
+      </div>
 
       <el-table v-loading="loading" :data="records" border stripe>
         <el-table-column prop="id" label="ID" width="170" />
@@ -99,7 +125,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Search } from '@element-plus/icons-vue'
 import {
   ElMessage,
   ElMessageBox,
@@ -112,6 +138,7 @@ import {
   shopCategoryCreate,
   shopCategoryDelete,
   shopCategoryPage,
+  shopCategoryQuery,
   shopCategoryUpdate,
 } from '@/api/shop'
 import type { OptionVO } from '@/types/result'
@@ -124,16 +151,35 @@ const total = ref(0)
 const pageNum = ref(1)
 const pageSize = ref(10)
 const malls = ref<OptionVO[]>([])
+/** 全量分类（父分类下拉选项） */
+const allCategories = ref<ShopCategory[]>([])
+
+// 查询条件（分类名称模糊 + 所属商场 + 父分类）
+const filters = reactive<{ catName?: string; mallId?: number; parentId?: number }>({
+  catName: undefined,
+  mallId: undefined,
+  parentId: undefined,
+})
 
 async function load() {
   loading.value = true
   try {
-    const data = await shopCategoryPage({ pageNum: pageNum.value, pageSize: pageSize.value })
+    const data = await shopCategoryQuery({
+      pageNum: pageNum.value,
+      pageSize: pageSize.value,
+      catName: filters.catName?.trim() || undefined,
+      mallId: filters.mallId,
+      parentId: filters.parentId,
+    })
     records.value = data.records
     total.value = data.total
   } finally {
     loading.value = false
   }
+}
+function onSearch() {
+  pageNum.value = 1
+  load()
 }
 function onSizeChange() {
   pageNum.value = 1
@@ -216,17 +262,9 @@ async function onDelete(row: unknown) {
 }
 
 mallOptions().then((options) => (malls.value = options))
+// 全量分类用于父分类下拉（父分类为 0 的根分类也保留在选项中，查询时后端按 parentId 精确匹配）
+shopCategoryPage({ pageNum: 1, pageSize: 1000 }).then((d) => (allCategories.value = d.records))
 load()
 </script>
 
-<style scoped>
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.page-title {
-  font-weight: 600;
-}
-</style>
+<style scoped></style>

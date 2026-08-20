@@ -68,6 +68,8 @@ interface MenuItem {
 }
 
 // 菜单从路由表派生，按角色过滤
+// 注意：index 必须用绝对路径（el-menu router 模式 push 相对路径时，
+// 在深层路由如 /mall/1/floors 下会按当前 URL 相对解析导致 404）
 const menus = computed<MenuItem[]>(() => {
   const layoutRoute = router.options.routes.find((r) => r.path === '/')
   const children = layoutRoute?.children ?? []
@@ -78,7 +80,7 @@ const menus = computed<MenuItem[]>(() => {
       return !roles || roles.length === 0 || roles.includes(auth.userType)
     })
     .map((c) => ({
-      path: c.path,
+      path: c.path.startsWith('/') ? c.path : `/${c.path}`,
       title: c.meta?.title ?? c.path,
       icon: c.meta?.icon,
     }))

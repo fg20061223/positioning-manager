@@ -11,6 +11,36 @@
         </div>
       </template>
 
+      <!-- 查询条件：楼层状态（前端过滤）+ 编码/名称（后端过滤） -->
+      <div class="toolbar">
+        <el-select
+          v-model="filters.status"
+          placeholder="状态"
+          clearable
+          style="width: 110px"
+          @change="onSearch"
+        >
+          <el-option v-for="s in floorStatusOptions" :key="s.code" :label="s.label" :value="Number(s.code)" />
+        </el-select>
+        <el-input
+          v-model="filters.floorCode"
+          placeholder="楼层编码"
+          clearable
+          style="width: 120px"
+          @keyup.enter="onSearch"
+          @clear="onSearch"
+        />
+        <el-input
+          v-model="filters.floorName"
+          placeholder="楼层名称"
+          clearable
+          style="width: 140px"
+          @keyup.enter="onSearch"
+          @clear="onSearch"
+        />
+        <el-button type="primary" :icon="Search" @click="onSearch">查询</el-button>
+      </div>
+
       <el-table v-loading="loading" :data="floors" border stripe>
         <el-table-column prop="id" label="ID" width="170" />
         <el-table-column prop="floorCode" label="楼层编码" width="100" />
@@ -19,7 +49,7 @@
         <el-table-column label="状态" width="80">
           <template #default="{ row }">
             <el-tag :type="row.status === 1 ? 'success' : 'info'">
-              {{ row.status === 1 ? '开放' : '关闭' }}
+              {{ dictLabel(DICT_TYPES.FLOOR_STATUS, String(row.status)) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -135,9 +165,9 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Plus } from '@element-plus/icons-vue'
+import { ArrowLeft, Plus, Search } from '@element-plus/icons-vue'
 import {
   ElMessage,
   ElMessageBox,
@@ -151,14 +181,16 @@ import {
   floorDelete,
   floorUpdate,
   mallGet,
+  mallOptions,
 } from '@/api/mall'
 import FloorImageUpload from '@/components/FloorImageUpload.vue'
+import { useDicts } from '@/composables/useDicts'
+import { DICT_TYPES } from '@/types/dict'
 import type { Calibration } from '@/types/file'
 import type { MallFloor, MallFloorForm } from '@/types/mall'
 
 const route = useRoute()
 const router = useRouter()
-const mallId = Number(route.params.mallId)
 
 const loading = ref(false)
 const saving = ref(false)
@@ -168,8 +200,26 @@ const dialogVisible = ref(false)
 const editingId = ref<number | null>(null)
 const formRef = ref<FormInstance>()
 
+/** 当前商场ID：来自路由 /mall/:mallId/floors；从菜单 /floors 进入时为 null，加载时取第一个商场 */
+const mallId = ref<number | null>(Number(route.params.mallId) || null)
+
+// 楼层状态下拉来自后端字典（floor_status: 1=开放 0=关闭），按状态前端过滤（by-mall 无 status 条件）
+const { options: dictOptions, label: dictLabel } = useDicts([DICT_TYPES.FLOOR_STATUS])
+const floorStatusOptions = computed(() => dictOptions(DICT_TYPES.FLOOR_STATUS))
+
+// 查询条件（对应 /business/floor/by-mall：编码/名称模糊 + 状态前端过滤）
+const filters = reactive<{
+  floorCode?: string
+  floorName?: string
+  status?: number
+}>({
+  floorCode: undefined,
+  floorName: undefined,
+  status: undefined,
+})
+
 const emptyForm = (): MallFloorForm => ({
-  mallId,
+  mallId: mallId.value ?? 0,
   floorCode: '',
   floorName: '',
   sortOrder: 0,
@@ -188,15 +238,45 @@ const rules: FormRules = {
   floorName: [{ required: true, message: '请输入楼层名称', trigger: 'blur' }],
 }
 
+/** 确认当前商场：路由无 mallId（从菜单 /floors 进入）时取第一个商场并修正 URL */
+async function ensureMallId(): Promise<number | null> {
+  if (mallId.value != null && mallId.value > 0) return mallId.value
+  const opts = await mallOptions().catch(() => [])
+  if (!opts.length) return null
+  const id = Number(opts[0].id)
+  mallId.value = id
+  router.replace(`/mall/${id}/floors`)
+  return id
+}
+
 async function load() {
   loading.value = true
   try {
-    const mall = await mallGet(mallId).catch(() => null)
-    mallName.value = mall?.mallName ?? `商场 #${mallId}`
-    floors.value = await floorByMall(mallId)
+    const mid = await ensureMallId()
+    if (mid == null) {
+      mallName.value = '暂无商场'
+      floors.value = []
+      return
+    }
+    const mall = await mallGet(mid).catch(() => null)
+    mallName.value = mall?.mallName ?? `商场 #${mid}`
+    // 后端按 编码/名称 模糊过滤（floor/by-mall）；状态筛选前端过滤
+    const list = await floorByMall({
+      mallId: mid,
+      floorCode: filters.floorCode?.trim() || undefined,
+      floorName: filters.floorName?.trim() || undefined,
+    })
+    floors.value =
+      filters.status != null
+        ? list.filter((f) => f.status === filters.status)
+        : list
   } finally {
     loading.value = false
   }
+}
+/** 查询按钮 */
+function onSearch() {
+  load()
 }
 
 function openCreate() {
@@ -260,7 +340,7 @@ async function onDelete(row: unknown) {
 
 function goZones(row: unknown) {
   const r = row as MallFloor
-  router.push(`/mall/${mallId}/floor/${r.id}/zones`)
+  router.push(`/mall/${mallId.value}/floor/${r.id}/zones`)
 }
 
 function back() {
@@ -292,7 +372,16 @@ function hasCalibration(remark?: string): boolean {
   return parseCalibration(remark) !== null
 }
 
-load()
+// 路由参数变化（如从 /floors 自动修正、从商场列表切换商场）时重新加载
+watch(
+  () => route.params.mallId,
+  (v) => {
+    const n = Number(v)
+    mallId.value = Number.isFinite(n) && n > 0 ? n : null
+    load()
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>

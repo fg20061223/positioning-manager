@@ -85,3 +85,15 @@ export interface ShopCategory {
   updatedAt?: string
   deleted?: number
 }
+
+/** 商铺分类条件分页入参（/business/shop-category/query） */
+export interface ShopCategoryQuery {
+  pageNum?: number
+  pageSize?: number
+  /** 分类名称（模糊） */
+  catName?: string
+  /** 所属商场ID（空=平台通用分类） */
+  mallId?: number
+  /** 父分类ID（0=根分类） */
+  parentId?: number
+}
