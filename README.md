@@ -5,7 +5,7 @@
 > 交接背景与接口契约见 `docs/PROJECT_CONTEXT.md`、`docs/API_CONTRACT/openapi-*.json`、`docs/管理后台前端规划.md`。
 > 后端网关 `http://127.0.0.1:8081`（全部接口 POST + JSON，请求头 `satoken`）。
 
-## 当前进度（M1 + M2）
+## 当前进度（M1 + M2 + M3）
 
 - 脚手架：Vite 6 + Vue 3.5 + TS 5.7 + Element Plus + Pinia + Vue Router + Axios
 - 登录/登出（`/auth/login|logout|me`）、token 持久化、401 自动跳登录
@@ -20,8 +20,12 @@
 - GeoJSON 组件：`GeoPreview`（只读预览）、`GeoDraw`（点/线/面绘制与顶点拖拽）
 - 平面图上传与标定：`FloorImageUpload`（`POST /business/file/upload` 上传 + 两点标定，
   标定参数随 `mall_floor.remark` JSON 保存，楼层列表显示"已标定"）
-- 与后端真实联调通过（经 dev 代理）：登录、各模块 CRUD、几何读写（轮廓/入口/质心）、
-  文件上传与访问、楼层标定 remark 闭环
+- 导航图编辑器（`/nav-editor/:mallId/:floorId`，从楼层管理进入）：
+  MapLibre 分层画布（平面图底图 + 导航节点/边/跨层），工具条（选择/新建节点/连边/跨层/
+  删除/路径预览）、节点拖拽即时保存、属性面板编辑；节点类型/边类型/跨层方式走字典；
+  对接 nav-node/nav-edge/floor-connect/nav-route，边距离前端欧氏计算、跨层路径预览
+- 与后端真实联调通过（经 dev 代理）：登录、各模块 CRUD、几何读写、文件上传、
+  楼层标定闭环、导航节点/边/跨层/跨层路径规划全链路
 
 ## 重要：雪花 ID 精度处理
 

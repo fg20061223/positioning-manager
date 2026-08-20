@@ -66,8 +66,9 @@
           </template>
         </el-table-column>
         <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" @click="goNavEditor(row)">导航编辑器</el-button>
             <el-button link type="primary" @click="goZones(row)">分区管理</el-button>
             <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
             <el-button link type="danger" @click="onDelete(row)">删除</el-button>
@@ -341,6 +342,11 @@ async function onDelete(row: unknown) {
 function goZones(row: unknown) {
   const r = row as MallFloor
   router.push(`/mall/${mallId.value}/floor/${r.id}/zones`)
+}
+
+function goNavEditor(row: unknown) {
+  const r = row as MallFloor
+  router.push(`/nav-editor/${mallId.value}/${r.id}`)
 }
 
 function back() {

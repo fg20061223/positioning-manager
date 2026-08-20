@@ -45,4 +45,7 @@ export const DICT_TYPES = {
   BEACON_STATUS: 'beacon_status',
   MALL_STATUS: 'mall_status',
   FLOOR_STATUS: 'floor_status',
+  NAV_NODE_TYPE: 'nav_node_type',
+  NAV_EDGE_TYPE: 'nav_edge_type',
+  CONNECT_TYPE: 'connect_type',
 } as const

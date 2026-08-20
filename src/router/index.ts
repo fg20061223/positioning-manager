@@ -63,6 +63,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '分区管理', hidden: true, roles: ['ADMIN', 'STAFF'] },
       },
       {
+        path: 'nav-editor/:mallId/:floorId',
+        name: 'NavEditor',
+        component: () => import('@/views/nav-editor/index.vue'),
+        meta: { title: '导航图编辑器', hidden: true, roles: ['ADMIN', 'STAFF'] },
+      },
+      {
         path: 'dict',
         name: 'Dict',
         component: () => import('@/views/dict/index.vue'),
