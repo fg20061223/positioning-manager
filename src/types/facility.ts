@@ -30,18 +30,6 @@ export interface Poi {
   deleted?: number
 }
 
-export const POI_TYPE_OPTIONS: { label: string; value: PoiType }[] = [
-  { label: '电梯', value: 'ELEVATOR' },
-  { label: '扶梯', value: 'ESCALATOR' },
-  { label: '楼梯', value: 'STAIR' },
-  { label: '卫生间', value: 'TOILET' },
-  { label: '商场出入口', value: 'ENTRANCE' },
-  { label: '车库出口', value: 'EXIT' },
-  { label: '服务台', value: 'SERVICE_DESK' },
-  { label: '母婴室', value: 'NURSING_ROOM' },
-  { label: '取款机', value: 'ATM' },
-]
-
 /** 信标协议类型 */
 export type BeaconType = 'IBEACON' | 'EDDYSTONE'
 
@@ -81,14 +69,3 @@ export interface BeaconQuery {
   floorId?: number
   status?: BeaconStatus | ''
 }
-
-export const BEACON_TYPE_OPTIONS: { label: string; value: BeaconType }[] = [
-  { label: 'iBeacon', value: 'IBEACON' },
-  { label: 'Eddystone', value: 'EDDYSTONE' },
-]
-
-export const BEACON_STATUS_OPTIONS: { label: string; value: BeaconStatus }[] = [
-  { label: '正常', value: 'ACTIVE' },
-  { label: '停用', value: 'INACTIVE' },
-  { label: '故障', value: 'FAULT' },
-]

@@ -18,12 +18,18 @@
           placeholder="楼层"
           clearable
           style="width: 130px"
-          @change="load"
+          @change="onFilterChange"
         >
           <el-option v-for="f in floors" :key="f.id" :label="f.name" :value="f.id" />
         </el-select>
-        <el-select v-model="filters.status" placeholder="状态" clearable style="width: 120px">
-          <el-option v-for="s in SPACE_STATUS_OPTIONS" :key="s.value" :label="s.label" :value="s.value" />
+        <el-select
+          v-model="filters.status"
+          placeholder="状态"
+          clearable
+          style="width: 120px"
+          @change="onFilterChange"
+        >
+          <el-option v-for="s in spaceStatusOptions" :key="s.code" :label="s.label" :value="s.code" />
         </el-select>
         <el-input
           v-model="keyword"
@@ -158,14 +164,14 @@
           <el-col :span="12">
             <el-form-item label="类型" prop="spaceType">
               <el-select v-model="form.spaceType" style="width: 100%">
-                <el-option v-for="t in SPACE_TYPE_OPTIONS" :key="t.value" :label="t.label" :value="t.value" />
+                <el-option v-for="t in spaceTypeOptions" :key="t.code" :label="t.label" :value="t.code" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="状态" prop="status">
               <el-select v-model="form.status" style="width: 100%">
-                <el-option v-for="s in SPACE_STATUS_OPTIONS" :key="s.value" :label="s.label" :value="s.value" />
+                <el-option v-for="s in spaceStatusOptions" :key="s.code" :label="s.label" :value="s.code" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -232,22 +238,26 @@ import {
   spaceUpdateGeometry,
 } from '@/api/space'
 import GeoDraw from '@/components/GeoDraw.vue'
+import { useDicts } from '@/composables/useDicts'
 import { useMallData } from '@/composables/useMallData'
 import { useAuthStore } from '@/stores/auth'
+import { DICT_TYPES } from '@/types/dict'
 import type { GeoJsonGeometry } from '@/types/file'
-import {
-  SPACE_STATUS_OPTIONS,
-  SPACE_TYPE_OPTIONS,
-  type ParkingSpace,
-  type SpaceStatus,
-  type SpaceType,
-} from '@/types/space'
+import type { ParkingSpace, SpaceStatus, SpaceType } from '@/types/space'
 
 const auth = useAuthStore()
 const canEdit = computed(() => ['ADMIN', 'STAFF'].includes(auth.userType))
 
 const { malls, floors, zones, loadMalls, loadFloors, loadZones } =
   useMallData()
+
+// 车位类型/状态下拉数据来自后端字典（space_type / space_status）
+const { options: dictOptions, label: dictLabel } = useDicts([
+  DICT_TYPES.SPACE_TYPE,
+  DICT_TYPES.SPACE_STATUS,
+])
+const spaceTypeOptions = computed(() => dictOptions(DICT_TYPES.SPACE_TYPE))
+const spaceStatusOptions = computed(() => dictOptions(DICT_TYPES.SPACE_STATUS))
 
 const loading = ref(false)
 const saving = ref(false)
@@ -288,8 +298,22 @@ async function load() {
 function onMallFilterChange() {
   filters.floorId = undefined
   loadFloors(filters.mallId)
-  load()
+  if (searchMode.value) {
+    clearSearch()
+  } else {
+    load()
+  }
 }
+
+/** 楼层/状态下拉变动：若处于车位号搜索模式先退出，再按新筛选条件查询 */
+function onFilterChange() {
+  if (searchMode.value) {
+    clearSearch()
+  } else {
+    load()
+  }
+}
+
 function onSizeChange() {
   pageNum.value = 1
   load()
@@ -474,10 +498,10 @@ async function onSaveGeometry() {
 
 /* ---------- 字典取值 ---------- */
 function spaceTypeLabel(t?: SpaceType) {
-  return SPACE_TYPE_OPTIONS.find((o) => o.value === t)?.label ?? t ?? '-'
+  return dictLabel(DICT_TYPES.SPACE_TYPE, t)
 }
 function spaceStatusLabel(s?: SpaceStatus) {
-  return SPACE_STATUS_OPTIONS.find((o) => o.value === s)?.label ?? s ?? '-'
+  return dictLabel(DICT_TYPES.SPACE_STATUS, s)
 }
 function spaceStatusTag(s?: SpaceStatus) {
   if (s === 'FREE') return 'success'

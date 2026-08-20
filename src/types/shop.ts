@@ -85,9 +85,3 @@ export interface ShopCategory {
   updatedAt?: string
   deleted?: number
 }
-
-export const SHOP_STATUS_OPTIONS: { label: string; value: ShopStatus }[] = [
-  { label: '营业', value: 'OPEN' },
-  { label: '装修', value: 'DECORATING' },
-  { label: '关闭', value: 'CLOSED' },
-]

@@ -14,6 +14,9 @@
 - 车位管理（`/space`）：条件分页/车位号搜索/CRUD/占用·释放/几何读写
 - 商铺管理（`/shop`，支持名称关键词搜索）+ 商铺分类（`/shop-category`）
 - 设施管理（`/poi`）、信标管理（`/beacon`）
+- 系统字典：枚举型下拉（车位类型/状态、商铺状态、设施类型、信标协议/状态等）
+  统一由后端 `POST /business/dict/list` 动态拉取（`src/composables/useDicts.ts`，
+  带模块级缓存），不再前端硬编码
 - GeoJSON 组件：`GeoPreview`（只读预览）、`GeoDraw`（点/线/面绘制与顶点拖拽）
 - 平面图上传与标定：`FloorImageUpload`（`POST /business/file/upload` 上传 + 两点标定，
   标定参数随 `mall_floor.remark` JSON 保存，楼层列表显示"已标定"）

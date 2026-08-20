@@ -22,8 +22,14 @@
         >
           <el-option v-for="f in floors" :key="f.id" :label="f.name" :value="f.id" />
         </el-select>
-        <el-select v-model="filters.status" placeholder="状态" clearable style="width: 120px">
-          <el-option v-for="s in BEACON_STATUS_OPTIONS" :key="s.value" :label="s.label" :value="s.value" />
+        <el-select
+          v-model="filters.status"
+          placeholder="状态"
+          clearable
+          style="width: 120px"
+          @change="load"
+        >
+          <el-option v-for="s in beaconStatusOptions" :key="s.code" :label="s.label" :value="s.code" />
         </el-select>
         <div class="spacer" />
         <el-button type="primary" :icon="Plus" @click="openCreate">新建信标</el-button>
@@ -117,7 +123,7 @@
           <el-col :span="8">
             <el-form-item label="协议" prop="beaconType">
               <el-select v-model="form.beaconType" style="width: 100%">
-                <el-option v-for="t in BEACON_TYPE_OPTIONS" :key="t.value" :label="t.label" :value="t.value" />
+                <el-option v-for="t in beaconTypeOptions" :key="t.code" :label="t.label" :value="t.code" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -131,7 +137,7 @@
           <el-col :span="12">
             <el-form-item label="状态" prop="status">
               <el-select v-model="form.status" style="width: 100%">
-                <el-option v-for="s in BEACON_STATUS_OPTIONS" :key="s.value" :label="s.label" :value="s.value" />
+                <el-option v-for="s in beaconStatusOptions" :key="s.code" :label="s.label" :value="s.code" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -161,7 +167,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import {
   ElMessage,
@@ -171,17 +177,25 @@ import {
 } from 'element-plus'
 
 import { beaconCreate, beaconDelete, beaconQuery, beaconUpdate } from '@/api/facility'
+import { useDicts } from '@/composables/useDicts'
 import { useMallData } from '@/composables/useMallData'
-import {
-  BEACON_STATUS_OPTIONS,
-  BEACON_TYPE_OPTIONS,
-  type Beacon,
-  type BeaconQuery,
-  type BeaconStatus,
-  type BeaconType,
+import { DICT_TYPES } from '@/types/dict'
+import type {
+  Beacon,
+  BeaconQuery,
+  BeaconStatus,
+  BeaconType,
 } from '@/types/facility'
 
 const { malls, floors, loadMalls, loadFloors } = useMallData()
+
+// 信标协议/状态下拉数据来自后端字典（beacon_type / beacon_status）
+const { options: dictOptions, label: dictLabel } = useDicts([
+  DICT_TYPES.BEACON_TYPE,
+  DICT_TYPES.BEACON_STATUS,
+])
+const beaconTypeOptions = computed(() => dictOptions(DICT_TYPES.BEACON_TYPE))
+const beaconStatusOptions = computed(() => dictOptions(DICT_TYPES.BEACON_STATUS))
 
 const loading = ref(false)
 const saving = ref(false)
@@ -304,7 +318,7 @@ async function onDelete(row: unknown) {
 }
 
 function beaconStatusLabel(s?: BeaconStatus) {
-  return BEACON_STATUS_OPTIONS.find((o) => o.value === s)?.label ?? s ?? '-'
+  return dictLabel(DICT_TYPES.BEACON_STATUS, s)
 }
 function beaconStatusTag(s?: BeaconStatus) {
   if (s === 'ACTIVE') return 'success'

@@ -22,7 +22,7 @@
           <el-option v-for="f in floors" :key="f.id" :label="f.name" :value="f.id" />
         </el-select>
         <el-select v-model="filters.poiType" placeholder="类型" clearable style="width: 150px">
-          <el-option v-for="t in POI_TYPE_OPTIONS" :key="t.value" :label="t.label" :value="t.value" />
+          <el-option v-for="t in poiTypeOptions" :key="t.code" :label="t.label" :value="t.code" />
         </el-select>
         <el-input
           v-model="keyword"
@@ -104,7 +104,7 @@
           <el-col :span="12">
             <el-form-item label="类型" prop="poiType">
               <el-select v-model="form.poiType" style="width: 100%">
-                <el-option v-for="t in POI_TYPE_OPTIONS" :key="t.value" :label="t.label" :value="t.value" />
+                <el-option v-for="t in poiTypeOptions" :key="t.code" :label="t.label" :value="t.code" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -143,15 +143,17 @@ import {
 } from 'element-plus'
 
 import { poiCreate, poiDelete, poiPage, poiUpdate } from '@/api/facility'
+import { useDicts } from '@/composables/useDicts'
 import { useLocalPaging } from '@/composables/useLocalPaging'
 import { useMallData } from '@/composables/useMallData'
-import {
-  POI_TYPE_OPTIONS,
-  type Poi,
-  type PoiType,
-} from '@/types/facility'
+import { DICT_TYPES } from '@/types/dict'
+import type { Poi, PoiType } from '@/types/facility'
 
 const { malls, floors, loadMalls, loadFloors } = useMallData()
+
+// 设施类型下拉数据来自后端字典（poi_type）
+const { options: dictOptions, label: dictLabel } = useDicts([DICT_TYPES.POI_TYPE])
+const poiTypeOptions = computed(() => dictOptions(DICT_TYPES.POI_TYPE))
 
 const loading = ref(false)
 const saving = ref(false)
@@ -269,7 +271,7 @@ async function onDelete(row: unknown) {
 }
 
 function poiTypeLabel(t?: PoiType) {
-  return POI_TYPE_OPTIONS.find((o) => o.value === t)?.label ?? t ?? '-'
+  return dictLabel(DICT_TYPES.POI_TYPE, t)
 }
 function floorName(id?: number) {
   return floors.value.find((f) => f.id === id)?.name ?? id ?? '-'

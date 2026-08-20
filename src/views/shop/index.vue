@@ -27,11 +27,18 @@
           placeholder="分类"
           clearable
           style="width: 140px"
+          @change="load"
         >
           <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
         </el-select>
-        <el-select v-model="filters.status" placeholder="状态" clearable style="width: 110px">
-          <el-option v-for="s in SHOP_STATUS_OPTIONS" :key="s.value" :label="s.label" :value="s.value" />
+        <el-select
+          v-model="filters.status"
+          placeholder="状态"
+          clearable
+          style="width: 110px"
+          @change="load"
+        >
+          <el-option v-for="s in shopStatusOptions" :key="s.code" :label="s.label" :value="s.code" />
         </el-select>
         <el-input
           v-model="filters.keyword"
@@ -153,7 +160,7 @@
           <el-col :span="12">
             <el-form-item label="状态" prop="status">
               <el-select v-model="form.status" style="width: 100%">
-                <el-option v-for="s in SHOP_STATUS_OPTIONS" :key="s.value" :label="s.label" :value="s.value" />
+                <el-option v-for="s in shopStatusOptions" :key="s.code" :label="s.label" :value="s.code" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -226,19 +233,20 @@ import {
   shopUpdateGeometry,
 } from '@/api/shop'
 import GeoDraw from '@/components/GeoDraw.vue'
+import { useDicts } from '@/composables/useDicts'
 import { useMallData } from '@/composables/useMallData'
 import { useAuthStore } from '@/stores/auth'
+import { DICT_TYPES } from '@/types/dict'
 import type { GeoJsonGeometry } from '@/types/file'
-import {
-  SHOP_STATUS_OPTIONS,
-  type Shop,
-  type ShopQuery,
-  type ShopStatus,
-} from '@/types/shop'
+import type { Shop, ShopQuery, ShopStatus } from '@/types/shop'
 
 const router = useRouter()
 const auth = useAuthStore()
 const canEdit = computed(() => ['ADMIN', 'STAFF'].includes(auth.userType))
+
+// 商铺状态下拉数据来自后端字典（shop_status）
+const { options: dictOptions, label: dictLabel } = useDicts([DICT_TYPES.SHOP_STATUS])
+const shopStatusOptions = computed(() => dictOptions(DICT_TYPES.SHOP_STATUS))
 
 const {
   malls,
@@ -440,7 +448,7 @@ function floorName(id?: number) {
   return floors.value.find((f) => f.id === id)?.name ?? id ?? '-'
 }
 function shopStatusLabel(s?: ShopStatus) {
-  return SHOP_STATUS_OPTIONS.find((o) => o.value === s)?.label ?? s ?? '-'
+  return dictLabel(DICT_TYPES.SHOP_STATUS, s)
 }
 function shopStatusTag(s?: ShopStatus) {
   if (s === 'OPEN') return 'success'

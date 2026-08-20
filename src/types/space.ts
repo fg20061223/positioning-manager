@@ -87,27 +87,3 @@ export interface NearbySpaceVO {
   zoneId?: number
   distanceM: number
 }
-
-export const SPACE_TYPE_OPTIONS: { label: string; value: SpaceType }[] = [
-  { label: '普通', value: 'NORMAL' },
-  { label: '无障碍', value: 'DISABLED' },
-  { label: '充电', value: 'CHARGING' },
-  { label: '微型', value: 'COMPACT' },
-  { label: '机械', value: 'MECHANICAL' },
-  { label: '母婴', value: 'MOTHER_CHILD' },
-]
-
-export const SPACE_STATUS_OPTIONS: { label: string; value: SpaceStatus }[] = [
-  { label: '空闲', value: 'FREE' },
-  { label: '占用', value: 'OCCUPIED' },
-  { label: '锁定', value: 'LOCKED' },
-  { label: '故障', value: 'FAULT' },
-]
-
-export const OCCUPY_SOURCE_OPTIONS: { label: string; value: OccupySource }[] = [
-  { label: 'APP', value: 'APP' },
-  { label: '摄像头', value: 'CAMERA' },
-  { label: '地磁', value: 'MAGNET' },
-  { label: '道闸', value: 'GATE' },
-  { label: '手动', value: 'MANUAL' },
-]
