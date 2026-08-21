@@ -40,6 +40,7 @@
           :tool="tool"
           :selected="selected"
           :route="route"
+          :focus="focusPoint"
           height="640px"
           @canvas-click="onCanvasClick"
           @node-click="onNodeClick"
@@ -273,6 +274,7 @@ import {
   navNodeCreate,
   navNodeDelete,
   navNodeQuery,
+  navNodeQueryGeometry,
   navNodeUpdate,
   navNodeUpdateGeometry,
   navRoute,
@@ -293,8 +295,9 @@ import type {
 
 const routeObj = useRoute()
 const router = useRouter()
-const mallId = Number(routeObj.params.mallId)
-const floorId = Number(routeObj.params.floorId)
+// 响应式路由参数：切换楼层时路由复用同一组件实例，必须用 computed 才能感知变化
+const mallId = computed(() => Number(routeObj.params.mallId))
+const floorId = computed(() => Number(routeObj.params.floorId))
 
 const loading = ref(false)
 const saving = ref(false)
@@ -307,6 +310,8 @@ const nodes = ref<NavNode[]>([])
 const edges = ref<NavEdge[]>([])
 const connects = ref<FloorConnect[]>([])
 const route = ref<RouteVO | null>(null)
+/** 新建节点后请求画布视野跟随到该点 */
+const focusPoint = ref<{ x: number; y: number } | null>(null)
 
 const tool = ref<'select' | 'create-node' | 'create-edge' | 'connect-floor' | 'delete' | 'route'>('select')
 const selected = ref<{ type: 'node' | 'edge' | 'connect'; id: number } | null>(null)
@@ -349,19 +354,30 @@ async function load() {
   loading.value = true
   try {
     const [mall, floor, nodesData, edgesData, connectsData] = await Promise.all([
-      mallGet(mallId).catch(() => null),
-      floorGet(floorId).catch(() => null),
-      navNodeQuery(mallId, floorId),
-      navEdgeQuery(mallId),
+      mallGet(mallId.value).catch(() => null),
+      floorGet(floorId.value).catch(() => null),
+      navNodeQueryGeometry(mallId.value, floorId.value),
+      navEdgeQuery(mallId.value),
       floorConnectPage({ pageNum: 1, pageSize: 1000 }),
     ])
-    mallName.value = mall?.mallName ?? `商场 #${mallId}`
-    floorName.value = floor?.floorName ?? `楼层 #${floorId}`
+    mallName.value = mall?.mallName ?? `商场 #${mallId.value}`
+    floorName.value = floor?.floorName ?? `楼层 #${floorId.value}`
     floorImage.value = floor?.imageUrl
       ? { url: floor.imageUrl, calibration: parseCalibration(floor.remark) }
       : undefined
 
-    nodes.value = nodesData.records
+    // query-geometry 返回 geomGeoJson（GeoJSON），转成节点渲染结构
+    nodes.value = nodesData.map((g) => ({
+      id: g.id,
+      mallId: g.mallId,
+      floorId: g.floorId,
+      nodeType: g.nodeType,
+      name: g.name,
+      geom: g.geomGeoJson,
+      isAccessible: g.isAccessible,
+      sortOrder: g.sortOrder,
+      remark: g.remark,
+    }))
     // 当前楼层的边 = 两端节点都在本层
     const nodeIds = new Set(nodes.value.map((n) => n.id))
     edges.value = edgesData.records.filter(
@@ -369,7 +385,7 @@ async function load() {
     )
     // 本层出发的跨层连接
     connects.value = connectsData.records.filter(
-      (c) => c.mallId === mallId && c.fromFloorId === floorId,
+      (c) => c.mallId === mallId.value && c.fromFloorId === floorId.value,
     )
     route.value = null
     selected.value = null
@@ -379,22 +395,43 @@ async function load() {
 }
 
 async function loadFloors() {
-  const list = await floorByMall({ mallId })
+  const list = await floorByMall({ mallId: mallId.value })
   floors.value = list.map((f) => ({ id: f.id, name: f.floorName }))
 }
 
 function onFloorSwitch(id: number) {
-  if (id && id !== floorId) {
-    router.push(`/nav-editor/${mallId}/${id}`)
+  if (id && id !== floorId.value) {
+    router.push(`/nav-editor/${mallId.value}/${id}`)
   }
 }
+
+/** 路由参数变化（含楼层切换）时重载数据并复位本地状态 */
+watch(
+  () => [mallId.value, floorId.value],
+  async () => {
+    nodes.value = []
+    edges.value = []
+    connects.value = []
+    route.value = null
+    selected.value = null
+    edgeDraft.value = null
+    routeDraft.value = null
+    focusPoint.value = null
+    nodeDialog.value = false
+    edgeDialog.value = false
+    connectDialog.value = false
+    tool.value = 'select'
+    await loadFloors()
+    await load()
+  },
+)
 
 function reload() {
   load()
 }
 
 function back() {
-  router.push(`/mall/${mallId}/floors`)
+  router.push(`/mall/${mallId.value}/floors`)
 }
 
 /* ---------- 辅助 ---------- */
@@ -423,7 +460,7 @@ function edgeTypeLabel(t?: string) {
   return dictLabel(DICT_TYPES.NAV_EDGE_TYPE, t)
 }
 
-const otherFloors = computed(() => floors.value.filter((f) => f.id !== floorId))
+const otherFloors = computed(() => floors.value.filter((f) => f.id !== floorId.value))
 
 /* ---------- 画布事件 ---------- */
 const nodeDraft = ref<{ x: number; y: number } | null>(null)
@@ -453,8 +490,8 @@ async function submitNode() {
   saving.value = true
   try {
     await navNodeCreate({
-      mallId,
-      floorId,
+      mallId: mallId.value,
+      floorId: floorId.value,
       nodeType: nodeForm.nodeType,
       name: nodeForm.name || undefined,
       geomGeoJson: JSON.stringify({
@@ -467,6 +504,10 @@ async function submitNode() {
     ElMessage.success('节点已创建')
     nodeDialog.value = false
     await load()
+    // 视野跟随到新节点，避免"不知道新节点在哪"
+    if (nodeDraft.value) {
+      focusPoint.value = { x: nodeDraft.value.x, y: nodeDraft.value.y }
+    }
   } catch {
     // 拦截器已提示
   } finally {
@@ -501,7 +542,7 @@ async function submitEdge() {
   saving.value = true
   try {
     await navEdgeCreate({
-      mallId,
+      mallId: mallId.value,
       fromNodeId: edgeDraft.value.from,
       toNodeId: edgeDraft.value.to,
       edgeType: edgeForm.edgeType,
@@ -542,7 +583,7 @@ async function onTargetFloorChange(id: number) {
   targetFloorNodes.value = []
   if (!id) return
   try {
-    const data = await navNodeQuery(mallId, id)
+    const data = await navNodeQuery(mallId.value, id)
     targetFloorNodes.value = data.records
   } catch {
     // 忽略
@@ -558,8 +599,8 @@ async function submitConnect() {
   saving.value = true
   try {
     await floorConnectCreate({
-      mallId,
-      fromFloorId: floorId,
+      mallId: mallId.value,
+      fromFloorId: floorId.value,
       toFloorId: connectForm.targetFloorId,
       connectType: connectForm.connectType,
       fromNodeId: connectDraft.value,
@@ -633,7 +674,7 @@ async function pickRouteNode(id: number) {
   if (from === id) return
   loading.value = true
   try {
-    const r = await navRoute({ mallId, fromNodeId: from, toNodeId: id })
+    const r = await navRoute({ mallId: mallId.value, fromNodeId: from, toNodeId: id })
     route.value = r
   } catch {
     // 拦截器已提示（如无连通路径）

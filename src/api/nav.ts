@@ -5,6 +5,7 @@ import type {
   NavEdge,
   NavNode,
   NavNodeCreateRequest,
+  NavNodeGeoVO,
   NavNodeGeometryRequest,
   NavRouteRequest,
   RouteVO,
@@ -15,6 +16,17 @@ export function navNodeQuery(mallId: number, floorId: number) {
   return http.post<PageResult<NavNode>>('/business/nav-node/query', {
     pageNum: 1,
     pageSize: 1000,
+    mallId,
+    floorId,
+  })
+}
+/**
+ * 按商场/楼层查询节点几何（GeoJSON）。
+ * 注意：通用 /query 的 geom 字段不返回（实体 select=false），
+ * 编辑器加载节点必须走本接口。
+ */
+export function navNodeQueryGeometry(mallId: number, floorId: number) {
+  return http.post<NavNodeGeoVO[]>('/business/nav-node/query-geometry', {
     mallId,
     floorId,
   })

@@ -1,34 +1,26 @@
 <template>
-  <div ref="containerEl" class="nav-canvas" :style="{ height }" />
+  <div class="nav-canvas-wrap" :style="{ height }">
+    <div ref="containerEl" class="nav-canvas" />
+    <!-- 状态指示器：便于确认数据链路与排查渲染 -->
+    <div class="nav-canvas__status">
+      <el-tag size="small" :type="mapReady ? 'success' : 'warning'">
+        地图{{ mapReady ? '已就绪' : '初始化中' }}
+      </el-tag>
+      <el-tag size="small">节点 {{ nodeCount }}</el-tag>
+      <el-tag size="small">边 {{ edgeCount }}</el-tag>
+      <el-tag v-if="!floorImage?.url" size="small" type="info">无平面图底图</el-tag>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
-import * as maplibregl from 'maplibre-gl'
-import 'maplibre-gl/dist/maplibre-gl.css'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 
 import type { Calibration } from '@/types/file'
 import type { FloorConnect, NavEdge, NavNode, RouteVO } from '@/types/nav'
 import { resolveStaticUrl } from '@/utils/resolveStaticUrl'
-
-/** 最小 GeoJSON 类型（避免依赖 geojson 包） */
-interface GPoint {
-  type: 'Point'
-  coordinates: number[]
-}
-interface GLineString {
-  type: 'LineString'
-  coordinates: number[][]
-}
-interface GFeature {
-  type: 'Feature'
-  geometry: GPoint | GLineString
-  properties: Record<string, unknown>
-}
-interface GFeatureCollection {
-  type: 'FeatureCollection'
-  features: GFeature[]
-}
 
 const props = defineProps<{
   nodes: NavNode[]
@@ -39,6 +31,8 @@ const props = defineProps<{
   tool: 'select' | 'create-node' | 'create-edge' | 'connect-floor' | 'delete' | 'route'
   selected: { type: 'node' | 'edge' | 'connect'; id: number } | null
   route?: RouteVO | null
+  /** 请求视野跟随到某米制坐标（如新建节点后） */
+  focus?: { x: number; y: number } | null
   height?: string
 }>()
 
@@ -50,7 +44,10 @@ const emit = defineEmits<{
 }>()
 
 const containerEl = ref<HTMLDivElement | null>(null)
-let map: maplibregl.Map | null = null
+let map: L.Map | null = null
+const mapReady = ref(false)
+const nodeCount = computed(() => displayNodes.value.filter((n) => nodeCoord(n)).length)
+const edgeCount = computed(() => props.edges.length)
 
 /** 画布渲染用节点副本：拖拽时直接改本地坐标，不触碰 props */
 const displayNodes = ref<NavNode[]>([])
@@ -62,385 +59,236 @@ watch(
   { immediate: true },
 )
 
-/** 米制坐标 -> MapLibre lng/lat（本地平面坐标直接映射，楼层范围小、畸变可忽略） */
-function toLngLat(x: number, y: number): [number, number] {
-  return [x, y]
+/**
+ * Leaflet CRS.Simple：米制坐标 (x, y) 直接映射到地图 [lat=y, lng=x]。
+ * CRS.Simple 的 y 轴向下（与屏幕一致），楼层米制 y 向下（M2 标定 my=py*scaleY+offsetY，
+ * scaleY>0 时随像素增大），与图片方向一致、不翻转。
+ */
+function toLatLng(x: number, y: number): [number, number] {
+  return [y, x]
 }
 
-/** 节点 -> 坐标（解析 geom GeoJSON Point） */
+/** 节点 -> 米制坐标（解析 geom GeoJSON Point） */
 function nodeCoord(n: NavNode): [number, number] | null {
   if (!n.geom) return null
   try {
     const g = JSON.parse(n.geom)
-    if (g.type === 'Point') return toLngLat(g.coordinates[0], g.coordinates[1])
+    if (g.type === 'Point') return [g.coordinates[0], g.coordinates[1]]
   } catch {
     // 忽略坏几何
   }
   return null
 }
 
-function nodesGeoJson(): GFeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: displayNodes.value
-      .map((n) => {
-        const c = nodeCoord(n)
-        if (!c) return null
-        return {
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: c },
-          properties: { id: String(n.id), nodeType: n.nodeType, name: n.name ?? '' },
-        } as GFeature
-      })
-      .filter((f): f is GFeature => f !== null),
+/** 节点类型 -> 颜色 */
+function nodeColor(nodeType?: string): string {
+  switch (nodeType) {
+    case 'ELEVATOR':
+    case 'ESCALATOR':
+    case 'STAIR':
+      return '#f56c6c'
+    case 'DOOR':
+      return '#e6a23c'
+    case 'SPACE_ENTRY':
+      return '#67c23a'
+    case 'SHOP_ENTRY':
+    case 'POI_ENTRY':
+      return '#409eff'
+    case 'JUNCTION':
+      return '#303133'
+    default:
+      return '#909399'
   }
 }
 
-function edgesGeoJson(): GFeatureCollection {
+/* ---------- 图层 ---------- */
+let imageLayer: L.ImageOverlay | null = null
+let edgeLayer: L.LayerGroup | null = null
+let connectLayer: L.LayerGroup | null = null
+let nodeLayer: L.LayerGroup | null = null
+let routeLayer: L.LayerGroup | null = null
+let selEdgeLayer: L.LayerGroup | null = null
+
+function setupImageSource() {
+  if (!map) return
+  if (imageLayer) {
+    imageLayer.remove()
+    imageLayer = null
+  }
+  const img = props.floorImage
+  if (!img || !img.url) return
+  const url = resolveStaticUrl(img.url)
+  const cal = img.calibration
+  const sx = cal?.scaleX ?? 1
+  const sy = cal?.scaleY ?? 1
+  const ox = cal?.offsetX ?? 0
+  const oy = cal?.offsetY ?? 0
+  // 有标定时按标定偏移铺图（图片像素 -> 米制）；无标定时按像素=米显示
+  const w = cal ? 100 / (sx || 1) : 1000
+  const h = cal ? 100 / (sy || 1) : 800
+  const bounds: L.LatLngBoundsExpression = [
+    [oy, ox],
+    [oy + h * sy, ox + w * sx],
+  ]
+  imageLayer = L.imageOverlay(url, bounds, { opacity: 1, interactive: false }).addTo(map)
+}
+
+function renderNodes() {
+  if (!map) return
+  if (nodeLayer) {
+    nodeLayer.clearLayers()
+  } else {
+    nodeLayer = L.layerGroup().addTo(map)
+  }
+  for (const n of displayNodes.value) {
+    const c = nodeCoord(n)
+    if (!c) continue
+    const [y, x] = toLatLng(c[0], c[1])
+    const isSel = props.selected?.type === 'node' && props.selected.id === n.id
+    const size = isSel ? 16 : 12
+    const color = nodeColor(n.nodeType)
+    const icon = L.divIcon({
+      className: 'nav-node-marker',
+      html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:${isSel ? 3 : 1.5}px solid ${isSel ? '#ff0000' : '#ffffff'};box-shadow:0 0 2px rgba(0,0,0,.4);"></div>`,
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+    })
+    const marker = L.marker([y, x], {
+      icon,
+      draggable: props.tool === 'select',
+    })
+    marker.on('click', (e) => {
+      L.DomEvent.stopPropagation(e)
+      emit('node-click', n.id)
+    })
+    marker.on('dragend', () => {
+      const ll = marker.getLatLng()
+      emit('node-drag', { id: n.id, x: ll.lng, y: ll.lat })
+      const node = displayNodes.value.find((z) => z.id === n.id)
+      if (node) {
+        node.geom = JSON.stringify({ type: 'Point', coordinates: [ll.lng, ll.lat] })
+      }
+    })
+    marker.bindTooltip(n.name || `#${n.id}`, { direction: 'top', offset: [0, -10] })
+    marker.addTo(nodeLayer)
+  }
+}
+
+function renderEdges() {
+  if (!map) return
+  if (edgeLayer) edgeLayer.clearLayers()
+  else edgeLayer = L.layerGroup().addTo(map)
+  if (selEdgeLayer) selEdgeLayer.clearLayers()
+  else selEdgeLayer = L.layerGroup().addTo(map)
   const byId = new Map(displayNodes.value.map((n) => [n.id, n]))
-  const feats: GFeature[] = []
   for (const e of props.edges) {
     const a = byId.get(e.fromNodeId)
     const b = byId.get(e.toNodeId)
     const ca = a ? nodeCoord(a) : null
     const cb = b ? nodeCoord(b) : null
     if (!ca || !cb) continue
-    feats.push({
-      type: 'Feature',
-      geometry: { type: 'LineString', coordinates: [ca, cb] },
-      properties: { id: String(e.id) },
-    } as GFeature)
+    const isSel = props.selected?.type === 'edge' && props.selected.id === e.id
+    const line = L.polyline([toLatLng(ca[0], ca[1]), toLatLng(cb[0], cb[1])], {
+      color: isSel ? '#ff0000' : '#8c8c8c',
+      weight: isSel ? 4 : 2.5,
+      interactive: true,
+    })
+    line.on('click', (ev) => {
+      L.DomEvent.stopPropagation(ev)
+      emit('edge-click', e.id)
+    })
+    line.addTo(isSel ? selEdgeLayer : edgeLayer)
   }
-  return { type: 'FeatureCollection', features: feats }
 }
 
-/** 跨层连接：仅渲染本层端点出发的示意虚线 */
-function connectsGeoJson(): GFeatureCollection {
+function renderConnects() {
+  if (!map) return
+  if (connectLayer) connectLayer.clearLayers()
+  else connectLayer = L.layerGroup().addTo(map)
   const byId = new Map(displayNodes.value.map((n) => [n.id, n]))
-  const feats: GFeature[] = []
   for (const c of props.connects) {
     const n = byId.get(c.fromNodeId)
     const coord = n ? nodeCoord(n) : null
     if (!coord) continue
-    feats.push({
-      type: 'Feature',
-      geometry: {
-        type: 'LineString',
-        coordinates: [coord, [coord[0] + 4, coord[1] + 4]],
-      },
-      properties: { id: String(c.id), connectType: c.connectType },
-    } as GFeature)
+    const [y, x] = toLatLng(coord[0], coord[1])
+    L.polyline(
+      [
+        [y, x],
+        [y + 4, x + 4],
+      ],
+      { color: '#9254de', weight: 3, dashArray: '4 6', interactive: false },
+    ).addTo(connectLayer)
   }
-  return { type: 'FeatureCollection', features: feats }
 }
 
-function routeGeoJson(): GFeatureCollection {
-  if (!props.route) return { type: 'FeatureCollection', features: [] }
+function renderRoute() {
+  if (!map) return
+  if (routeLayer) routeLayer.clearLayers()
+  else routeLayer = L.layerGroup().addTo(map)
+  if (!props.route) return
   const byId = new Map(displayNodes.value.map((n) => [n.id, n]))
-  const coords: [number, number][] = []
+  const latlngs: [number, number][] = []
   for (const id of props.route.nodeIds) {
     const n = byId.get(id)
     const c = n ? nodeCoord(n) : null
-    if (c) coords.push(c)
+    if (c) latlngs.push(toLatLng(c[0], c[1]))
   }
-  if (coords.length < 2) return { type: 'FeatureCollection', features: [] }
-  return {
-    type: 'FeatureCollection',
-    features: [
-      {
-        type: 'Feature',
-        geometry: { type: 'LineString', coordinates: coords },
-        properties: {},
-      } as GFeature,
-    ],
-  }
-}
-
-function selectedNode(): GFeatureCollection {
-  if (!props.selected || props.selected.type !== 'node') {
-    return { type: 'FeatureCollection', features: [] }
-  }
-  const n = displayNodes.value.find((x) => x.id === props.selected!.id)
-  const c = n ? nodeCoord(n) : null
-  if (!c) return { type: 'FeatureCollection', features: [] }
-  return {
-    type: 'FeatureCollection',
-    features: [
-      { type: 'Feature', geometry: { type: 'Point', coordinates: c }, properties: {} } as GFeature,
-    ],
-  }
-}
-
-function selectedEdge(): GFeatureCollection {
-  if (!props.selected || props.selected.type !== 'edge') {
-    return { type: 'FeatureCollection', features: [] }
-  }
-  const byId = new Map(displayNodes.value.map((n) => [n.id, n]))
-  const e = props.edges.find((x) => x.id === props.selected!.id)
-  const a = e ? byId.get(e.fromNodeId) : undefined
-  const b = e ? byId.get(e.toNodeId) : undefined
-  const ca = a ? nodeCoord(a) : null
-  const cb = b ? nodeCoord(b) : null
-  if (!ca || !cb) return { type: 'FeatureCollection', features: [] }
-  return {
-    type: 'FeatureCollection',
-    features: [
-      { type: 'Feature', geometry: { type: 'LineString', coordinates: [ca, cb] }, properties: {} } as GFeature,
-    ],
-  }
-}
-
-function fitToData() {
-  if (!map) return
-  const bounds = new maplibregl.LngLatBounds()
-  let has = false
-  for (const n of displayNodes.value) {
-    const c = nodeCoord(n)
-    if (c) {
-      bounds.extend(c)
-      has = true
-    }
-  }
-  const img = props.floorImage
-  if (img?.calibration) {
-    const cal = img.calibration
-    bounds.extend([cal.offsetX, cal.offsetY])
-    bounds.extend([cal.offsetX + 60, cal.offsetY + 60])
-    has = true
-  }
-  if (!has) {
-    bounds.extend([0, 0])
-    bounds.extend([100, 100])
-  }
-  map.fitBounds(bounds, { padding: 40, maxZoom: 19 })
-}
-
-function setupImageSource() {
-  if (!map) return
-  const img = props.floorImage
-  if (!img || !img.url) {
-    if (map.getSource('floor-image')) {
-      map.removeLayer('floor-image')
-      map.removeSource('floor-image')
-    }
-    return
-  }
-  const url = resolveStaticUrl(img.url)
-  const cal = img.calibration
-  // 无标定时按图片原始像素当米制（像素=米）显示
-  const sx = cal?.scaleX ?? 1
-  const sy = cal?.scaleY ?? 1
-  const ox = cal?.offsetX ?? 0
-  const oy = cal?.offsetY ?? 0
-  // 有标定时以标定 offset 为左上角、100x100m 见方铺图（图片被拉伸铺满，比例由标定决定）
-  const w = cal ? 100 / (sx || 1) : 1000
-  const h = cal ? 100 / (sy || 1) : 800
-  const topLeft: [number, number] = [ox, oy]
-  const topRight: [number, number] = [ox + w * sx, oy]
-  const bottomRight: [number, number] = [ox + w * sx, oy + h * sy]
-  const bottomLeft: [number, number] = [ox, oy + h * sy]
-  if (map.getSource('floor-image')) {
-    ;(map.getSource('floor-image') as maplibregl.ImageSource).updateImage({
-      url,
-      coordinates: [topLeft, topRight, bottomRight, bottomLeft],
-    })
-  } else {
-    map.addSource('floor-image', {
-      type: 'image',
-      url,
-      coordinates: [topLeft, topRight, bottomRight, bottomLeft],
-    })
-    map.addLayer({
-      id: 'floor-image',
-      type: 'raster',
-      source: 'floor-image',
-    })
-  }
-}
-
-function ensureSource(id: string, data: GFeatureCollection) {
-  if (!map || !map.getSource(id)) return
-  ;(map.getSource(id) as maplibregl.GeoJSONSource).setData(data)
-}
-
-function addLayers() {
-  if (!map) return
-  if (!map.getSource('edges')) {
-    map.addSource('edges', { type: 'geojson', data: edgesGeoJson() })
-    map.addLayer({
-      id: 'edges',
-      type: 'line',
-      source: 'edges',
-      layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': '#8c8c8c', 'line-width': 2.5 },
-    })
-    map.on('click', 'edges', (e) => {
-      const id = e.features?.[0]?.properties?.id
-      if (id != null) emit('edge-click', Number(id))
-    })
-  }
-  if (!map.getSource('connects')) {
-    map.addSource('connects', { type: 'geojson', data: connectsGeoJson() })
-    map.addLayer({
-      id: 'connects',
-      type: 'line',
-      source: 'connects',
-      layout: { 'line-cap': 'round' },
-      paint: { 'line-color': '#9254de', 'line-width': 3, 'line-dasharray': [2, 2] },
-    })
-  }
-  if (!map.getSource('nodes')) {
-    map.addSource('nodes', { type: 'geojson', data: nodesGeoJson() })
-    map.addLayer({
-      id: 'nodes',
-      type: 'circle',
-      source: 'nodes',
-      paint: {
-        'circle-radius': 6,
-        'circle-color': [
-          'match',
-          ['get', 'nodeType'],
-          'ELEVATOR', '#f56c6c',
-          'ESCALATOR', '#f56c6c',
-          'STAIR', '#f56c6c',
-          'DOOR', '#e6a23c',
-          'SPACE_ENTRY', '#67c23a',
-          'SHOP_ENTRY', '#409eff',
-          'POI_ENTRY', '#409eff',
-          'JUNCTION', '#303133',
-          '#909399',
-        ],
-        'circle-stroke-color': '#ffffff',
-        'circle-stroke-width': 1.5,
-      },
-    })
-    map.on('click', 'nodes', (e) => {
-      const id = e.features?.[0]?.properties?.id
-      if (id != null) emit('node-click', Number(id))
-    })
-    map.on('mousedown', 'nodes', onNodeMouseDown)
-  }
-  if (!map.getSource('route-line')) {
-    map.addSource('route-line', { type: 'geojson', data: routeGeoJson() })
-    map.addLayer({
-      id: 'route-line',
-      type: 'line',
-      source: 'route-line',
-      layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': '#13c2c2', 'line-width': 5 },
-    })
-  }
-  if (!map.getSource('sel-node')) {
-    map.addSource('sel-node', { type: 'geojson', data: selectedNode() })
-    map.addLayer({
-      id: 'sel-node',
-      type: 'circle',
-      source: 'sel-node',
-      paint: {
-        'circle-radius': 10,
-        'circle-color': '#ff0000',
-        'circle-stroke-color': '#ffffff',
-        'circle-stroke-width': 2,
-      },
-    })
-  }
-  if (!map.getSource('sel-edge')) {
-    map.addSource('sel-edge', { type: 'geojson', data: selectedEdge() })
-    map.addLayer({
-      id: 'sel-edge',
-      type: 'line',
-      source: 'sel-edge',
-      layout: { 'line-cap': 'round' },
-      paint: { 'line-color': '#ff0000', 'line-width': 4 },
-    })
+  if (latlngs.length >= 2) {
+    L.polyline(latlngs, { color: '#13c2c2', weight: 5, interactive: false }).addTo(routeLayer)
   }
 }
 
 function updateAll() {
   if (!map) return
-  addLayers()
-  ensureSource('edges', edgesGeoJson())
-  ensureSource('connects', connectsGeoJson())
-  ensureSource('nodes', nodesGeoJson())
-  ensureSource('route-line', routeGeoJson())
-  ensureSource('sel-node', selectedNode())
-  ensureSource('sel-edge', selectedEdge())
+  renderEdges()
+  renderConnects()
+  renderNodes()
+  renderRoute()
 }
 
-/* ---------- 节点拖拽（select 模式下） ---------- */
-let dragging: { id: number; moved: boolean } | null = null
-let startPos: [number, number] = [0, 0]
-
-function onNodeMouseDown(e: maplibregl.MapLayerMouseEvent) {
-  if (props.tool !== 'select') return
-  const id = e.features?.[0]?.properties?.id
-  if (id == null) return
-  dragging = { id: Number(id), moved: false }
-  startPos = [e.lngLat.lng, e.lngLat.lat]
-  if (map) map.getCanvas().style.cursor = 'grabbing'
-  map?.on('mousemove', onDragMove)
-  map?.on('mouseup', onDragEnd)
-}
-
-function onDragMove(e: maplibregl.MapMouseEvent) {
-  if (!dragging || !map) return
-  const dx = e.lngLat.lng - startPos[0]
-  const dy = e.lngLat.lat - startPos[1]
-  if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) dragging.moved = true
-  const n = displayNodes.value.find((x) => x.id === dragging!.id)
-  if (!n) return
-  n.geom = JSON.stringify({ type: 'Point', coordinates: [e.lngLat.lng, e.lngLat.lat] })
-  ensureSource('nodes', nodesGeoJson())
-  ensureSource('sel-node', selectedNode())
-}
-
-function onDragEnd(e: maplibregl.MapMouseEvent) {
-  if (!dragging || !map) return
-  const payload = { id: dragging.id, x: e.lngLat.lng, y: e.lngLat.lat }
-  const moved = dragging.moved
-  dragging = null
-  map.getCanvas().style.cursor = ''
-  map.off('mousemove', onDragMove)
-  map.off('mouseup', onDragEnd)
-  if (moved) emit('node-drag', payload)
-}
-
-/* ---------- 空白处点击（新建节点等） ---------- */
-function onMapClick(e: maplibregl.MapMouseEvent) {
-  emit('canvas-click', { x: e.lngLat.lng, y: e.lngLat.lat })
-}
-
-function onMouseMove(e: maplibregl.MapMouseEvent) {
+function fitToData() {
   if (!map) return
-  const features = map.queryRenderedFeatures(e.point, { layers: ['nodes'] })
-  const interactive =
-    props.tool === 'select' ||
-    props.tool === 'create-edge' ||
-    props.tool === 'connect-floor' ||
-    props.tool === 'route'
-  map.getCanvas().style.cursor = features.length
-    ? interactive
-      ? 'pointer'
-      : 'not-allowed'
-    : 'crosshair'
+  const latlngs: [number, number][] = []
+  for (const n of displayNodes.value) {
+    const c = nodeCoord(n)
+    if (c) latlngs.push(toLatLng(c[0], c[1]))
+  }
+  const img = props.floorImage
+  if (img?.calibration) {
+    const cal = img.calibration
+    latlngs.push(toLatLng(cal.offsetX, cal.offsetY))
+    latlngs.push(toLatLng(cal.offsetX + 60, cal.offsetY + 60))
+  }
+  if (!latlngs.length) {
+    latlngs.push(toLatLng(0, 0))
+    latlngs.push(toLatLng(100, 100))
+  }
+  map.fitBounds(L.latLngBounds(latlngs), { padding: [40, 40], maxZoom: 4 })
+}
+
+/** 首次有节点数据时自动 fit（避免空视野） */
+let fittedOnce = false
+function maybeFit() {
+  if (!fittedOnce && displayNodes.value.some((n) => nodeCoord(n)) && map) {
+    fittedOnce = true
+    fitToData()
+  }
 }
 
 onMounted(() => {
   if (!containerEl.value) return
-  map = new maplibregl.Map({
-    container: containerEl.value,
-    style: { version: 8, sources: {}, layers: [] },
-    center: [50, 50],
-    zoom: 10,
+  map = L.map(containerEl.value, {
+    crs: L.CRS.Simple,
+    zoomControl: true,
     attributionControl: false,
   })
-  map.on('load', () => {
-    setupImageSource()
-    addLayers()
-    fitToData()
+  map.setView(toLatLng(50, 50), 0)
+  map.on('click', (e: L.LeafletMouseEvent) => {
+    emit('canvas-click', { x: e.latlng.lng, y: e.latlng.lat })
   })
-  map.on('click', onMapClick)
-  map.on('mousemove', onMouseMove)
+  // CRS.Simple 下初始 bounds 较大，先 fit 到底图/默认范围
+  fitToData()
+  mapReady.value = true
 })
 
 onUnmounted(() => {
@@ -455,19 +303,49 @@ watch(
   },
   { deep: true },
 )
+
 watch(
   () => [props.nodes, props.edges, props.connects, props.route, props.selected],
-  () => updateAll(),
+  () => {
+    updateAll()
+    maybeFit()
+  },
   { deep: true },
+)
+
+/** 外部请求视野跟随（如新建节点后飞到新节点） */
+watch(
+  () => props.focus,
+  (f) => {
+    if (f && map) {
+      map.setView(toLatLng(f.x, f.y), Math.max(map.getZoom(), 2), { animate: true })
+    }
+  },
 )
 </script>
 
 <style scoped>
+.nav-canvas-wrap {
+  width: 100%;
+  position: relative;
+}
+
 .nav-canvas {
   width: 100%;
+  height: 100%;
   border: 1px solid #e4e7ed;
   border-radius: 4px;
   overflow: hidden;
-  position: relative;
+  background: #f2f3f5;
+}
+
+.nav-canvas__status {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  gap: 6px;
+  z-index: 400;
+  pointer-events: none;
 }
 </style>

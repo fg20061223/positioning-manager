@@ -30,6 +30,20 @@ export interface NavNode {
   deleted?: number
 }
 
+/** 节点几何 VO（/business/nav-node/query-geometry 返回，含 GeoJSON 坐标） */
+export interface NavNodeGeoVO {
+  id: number
+  mallId: number
+  floorId: number
+  nodeType: NavNodeType
+  name?: string
+  /** 节点坐标 GeoJSON（ST_AsGeoJSON 输出） */
+  geomGeoJson: string
+  isAccessible: boolean
+  sortOrder?: number
+  remark?: string
+}
+
 /** 带几何创建节点入参 */
 export interface NavNodeCreateRequest {
   mallId: number
